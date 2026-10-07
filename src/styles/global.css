@@ -329,8 +329,12 @@ small,
   }
 }
 
-/* sprayed colour shape: set --m to one of the --mask-* tokens */
-.spray-mask {
+/* Sprayed colour shapes: live #spray filter by default (components set filter + border-radius).
+   Cheap mode (weak devices, or toggled in the dev toolbar): a pre-rendered mask image instead.
+   Components set --m to one of the --mask-* tokens. */
+.bg-mask-spray .spray-mask {
+  filter: none !important;
+  border-radius: 0 !important;
   -webkit-mask: var(--m) center / 100% 100% no-repeat;
   mask: var(--m) center / 100% 100% no-repeat;
 }

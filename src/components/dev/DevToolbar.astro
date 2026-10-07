@@ -73,6 +73,9 @@
         { key: 'boilFps', label: 'частота кипения, к/с', min: 1, max: 24, step: 1 },
         { key: 'boilScale', label: 'дрожь линий', min: 0, max: 10, step: 0.1 },
         { key: 'pauseOnScroll', label: 'рисунки замирают во время скролла' },
+        { key: 'liveSpray', label: 'спрей-край живым фильтром (выкл = маски)' },
+        { key: 'sprayScale', label: 'спрей: разброс края', min: 0, max: 40, step: 1 },
+        { key: 'sprayBlur', label: 'спрей: мягкость края', min: 0, max: 12, step: 0.5 },
       ],
     },
   ];
@@ -98,6 +101,8 @@
     attr('#boil feDisplacementMap', 'scale', c.boilScale);
     attr('#boil-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
     attr('#still-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
+    attr('#spray feDisplacementMap', 'scale', c.sprayScale);
+    attr('#spray feGaussianBlur', 'stdDeviation', c.sprayBlur);
   }
 
   function diff(): Partial<BgConfig> {

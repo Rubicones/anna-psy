@@ -72,8 +72,14 @@ const attrs = href
       radial-gradient(90% 120% at 28% 22%, var(--c-sun), transparent 62%),
       radial-gradient(80% 110% at 88% 90%, var(--c-coral), transparent 70%);
     background-size: var(--tex-pigment-size), 100% 100%, 100% 100%;
-    /* same sprayed, speckled edge as the colour blobs (pre-rendered mask, no live filter) */
+    /* same sprayed, speckled edge as the colour blobs */
+    inset: -3px -4px;
+    filter: url(#spray);
+  }
+  /* cheap mode (html.bg-mask-spray): pre-rendered mask instead of the live filter */
+  :global(.bg-mask-spray) .btn--warm::before {
     inset: -9px -12px;
+    filter: none;
     border-radius: 0;
     -webkit-mask: var(--mask-a) center / 100% 100% no-repeat;
     mask: var(--mask-a) center / 100% 100% no-repeat;

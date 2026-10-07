@@ -17,7 +17,7 @@ interface Props {
 const { as: Tag = 'div', tone = 'sun', glow = 'white', shape = 'panel', tilt = 0, class: className } = Astro.props;
 ---
 
-<Tag class:list={['blobcard', className]} style={`--bg:${colorVar(tone)};--glow:${colorVar(glow)};--m:var(--mask-${shape.startsWith('panel') ? 'panel' : shape});--tilt:${tilt}deg`}>
+<Tag class:list={['blobcard', className]} style={`--bg:${colorVar(tone)};--glow:${colorVar(glow)};--r:var(--${shape.startsWith('panel') ? shape : 'blob-' + shape});--m:var(--mask-${shape.startsWith('panel') ? 'panel' : shape});--tilt:${tilt}deg`}>
   <span class="blobcard__shape spray-mask" aria-hidden="true"></span>
   <div class="blobcard__body"><slot /></div>
 </Tag>
@@ -30,19 +30,29 @@ const { as: Tag = 'div', tone = 'sun', glow = 'white', shape = 'panel', tilt = 0
   }
   .blobcard__shape {
     position: absolute;
-    /* the mask keeps ~10% transparent margin for the spray: grow the box to compensate */
-    inset: -9% -7%;
+    inset: 0;
     z-index: -1;
+    border-radius: var(--r);
     rotate: var(--tilt);
     background-color: var(--bg);
     background-image:
       var(--tex-pigment),
       radial-gradient(55% 50% at 32% 30%, color-mix(in srgb, var(--glow) 50%, transparent), transparent 72%);
     background-size: var(--tex-pigment-size), 100% 100%;
-    transition: scale 0.9s var(--ease-squish);
+    filter: url(#spray);
+    transition:
+      border-radius 1.2s var(--ease-squish),
+      scale 0.9s var(--ease-squish);
+  }
+  /* cheap mode: the mask keeps ~10% transparent margin for the spray — grow the box */
+  :global(.bg-mask-spray) .blobcard__shape {
+    inset: -9% -7%;
   }
   @media (hover: hover) {
     .blobcard:hover .blobcard__shape {
+      border-radius: var(--panel-b);
+    }
+    :global(.bg-mask-spray) .blobcard:hover .blobcard__shape {
       scale: 1.02 1.04;
     }
   }
