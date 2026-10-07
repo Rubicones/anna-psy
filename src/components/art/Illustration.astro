@@ -147,6 +147,19 @@ const vars = [
   /* ── idle micro-life ── */
   .life {
     transform-box: view-box;
+    /* runs only while the drawing is on screen (scripts/life.ts toggles .is-onscreen) */
+    animation-play-state: paused !important;
+  }
+  .illo.is-onscreen .life {
+    animation-play-state: running !important;
+  }
+  /* an animating drawing gets its own compositor layer, so its repaints don't re-run the
+     expensive spray/blur filters of the colour blobs underneath */
+  .illo.has-life.is-onscreen {
+    will-change: transform;
+  }
+  :global(.bg-no-life) .life {
+    animation: none !important;
   }
   @media (prefers-reduced-motion: no-preference) {
     .has-life .life--sway {

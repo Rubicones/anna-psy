@@ -71,10 +71,28 @@ uniform float uWarp;   // domain-warp strength
 uniform float uDetail; // fbm octaves 1..6
 uniform float uHalo;   // halo mix
 uniform float uRipple; // pointer ripple multiplier
+uniform float uGrad;   // 1 = gradient noise, 0 = value noise
 
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+// random unit-ish gradient per lattice point (Hoskins hash22, fract-only: stable on mobile GPUs)
+vec2 grad(vec2 p){
+  vec3 p3=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));
+  p3+=dot(p3,p3.yzx+33.33);
+  return fract((p3.xx+p3.yz)*p3.zy)*2.-1.;
+}
+// Value noise interpolates random VALUES → the grid shows through as facets once domain-warped.
+// Gradient noise interpolates random SLOPES with a quintic curve (C2-continuous) → no creases.
 float noise(vec2 p){
   vec2 i=floor(p), f=fract(p);
+  if(uGrad>.5){
+    vec2 u=f*f*f*(f*(f*6.-15.)+10.);
+    float a=dot(grad(i),f);
+    float b=dot(grad(i+vec2(1.,0.)),f-vec2(1.,0.));
+    float c=dot(grad(i+vec2(0.,1.)),f-vec2(0.,1.));
+    float d=dot(grad(i+vec2(1.,1.)),f-vec2(1.,1.));
+    // gradient noise is centred on 0 with a narrower spread: map it onto value noise's 0..1 range
+    return mix(mix(a,b,u.x),mix(c,d,u.x),u.y)*.85+.5;
+  }
   vec2 u=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x), mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x), u.y);
 }
@@ -206,7 +224,7 @@ export function initField(root: HTMLElement): void {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    uf = locs(fieldProg, ['uRes', 'uTime', 'uC', 'uPtr', 'uScale', 'uWarp', 'uDetail', 'uHalo', 'uRipple']);
+    uf = locs(fieldProg, ['uRes', 'uTime', 'uC', 'uPtr', 'uScale', 'uWarp', 'uDetail', 'uHalo', 'uRipple', 'uGrad']);
     up = locs(presentProg, ['uTex', 'uRes', 'uGrain', 'uFrame', 'uGrainSize']);
 
     tex = gl.createTexture();
@@ -224,6 +242,10 @@ export function initField(root: HTMLElement): void {
   onBg((patch) => {
     if ('fieldOn' in patch) applyOnOff();
     if ('renderScale' in patch || 'maxDpr' in patch) w = 0; // force resize
+    if ('adaptive' in patch && !bg().adaptive && dyn !== 1) {
+      dyn = 1;
+      w = 0;
+    }
     if ('canvasBlur' in patch && canvas) canvas.style.filter = bg().canvasBlur ? `blur(${bg().canvasBlur}px)` : '';
     if (bg().fieldOn) writeCss(0, true);
     kick();
@@ -238,6 +260,9 @@ export function initField(root: HTMLElement): void {
 
   // ── size: canvas at display resolution (≤ maxDpr), field texture at renderScale of it ──
   let w = 0, h = 0, fw = 0, fh = 0;
+  /** adaptive multiplier on renderScale (1 = as configured) */
+  let dyn = 1;
+  let fboDirty = false;
   function resize(): void {
     if (!gl || !canvas) return;
     const c = bg();
@@ -245,13 +270,20 @@ export function initField(root: HTMLElement): void {
     const nw = Math.max(1, Math.round(innerWidth * dpr));
     const nh = Math.max(1, Math.round(canvas.clientHeight * dpr));
     // ignore mobile toolbar jitter (canvas is 100lvh tall anyway)
-    if (nw === w && Math.abs(nh - h) < 40 * dpr) return;
-    w = nw;
-    h = nh;
-    canvas.width = w;
-    canvas.height = h;
-    fw = Math.max(1, Math.round(w * c.renderScale));
-    fh = Math.max(1, Math.round(h * c.renderScale));
+    // Mobile URL bar show/hide changes the height on every scroll direction change. The field is
+    // blurry, so let CSS stretch the canvas for that; only reallocate on real size changes.
+    const smallHeightChange = Math.abs(nh - h) < Math.max(40 * dpr, h * 0.25);
+    if (nw === w && smallHeightChange && !fboDirty) return;
+    fboDirty = false;
+    if (nw !== w || !smallHeightChange || !w) {
+      w = nw;
+      h = nh;
+      canvas.width = w;
+      canvas.height = h;
+    }
+    fw = Math.max(1, Math.round(w * c.renderScale * dyn));
+    fh = Math.max(1, Math.round(h * c.renderScale * dyn));
+    window.__bgStats = { dyn, frameMs: frameMs, fieldPx: `${fw}×${fh} → ${w}×${h}` };
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, fw, fh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -284,6 +316,9 @@ export function initField(root: HTMLElement): void {
   let last = 0;
   let clock = 12; // seconds of shader time (start mid-flow, not at a symmetric t=0)
   let ready = false;
+  let frameMs = 0;
+  let slow = 0;
+  let calm = 0;
 
   function frame(now: number): void {
     raf = 0;
@@ -293,6 +328,31 @@ export function initField(root: HTMLElement): void {
       // fps cap (30 by default): the field is slow; spend the battery elsewhere
       raf = requestAnimationFrame(frame);
       return;
+    }
+    // adaptive resolution: watch the interval between drawn frames
+    if (last && !motion.reduced && !c.fieldPaused) {
+      const iv = now - last;
+      frameMs = frameMs ? frameMs * 0.9 + iv * 0.1 : iv;
+      const budget = 1000 / c.fpsCap;
+      if (c.adaptive && gl) {
+        if (frameMs > budget * 1.35) {
+          slow += dt;
+          calm = 0;
+        } else if (frameMs < budget * 1.12) {
+          calm += dt;
+          slow = 0;
+        }
+        if (slow > 1 && dyn > 0.5) {
+          dyn = Math.max(0.5, +(dyn - 0.15).toFixed(2));
+          slow = 0;
+          fboDirty = true;
+        } else if (calm > 6 && dyn < 1) {
+          dyn = Math.min(1, +(dyn + 0.1).toFixed(2));
+          calm = 0;
+          fboDirty = true;
+        }
+      }
+      if (window.__bgStats) window.__bgStats.frameMs = frameMs;
     }
     last = now;
 
@@ -341,6 +401,7 @@ export function initField(root: HTMLElement): void {
     gl.uniform1f(uf.uDetail!, Math.round(c.detail));
     gl.uniform1f(uf.uHalo!, c.halo);
     gl.uniform1f(uf.uRipple!, c.ripple);
+    gl.uniform1f(uf.uGrad!, c.gradientNoise ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     // pass 2: upscale + grain at full canvas resolution

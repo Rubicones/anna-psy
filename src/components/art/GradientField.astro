@@ -19,10 +19,11 @@ const init = daytimes[initial].map((c, i) => `--f${i}:${c}`).join(';');
 </div>
 
 <style>
+  /* inset:0 tracks the current viewport (some in-app browsers treat lvh as svh);
+     the extra 120px below covers the mobile URL bar while it animates away */
   .field {
     position: fixed;
-    inset: 0 0 auto 0;
-    height: 100lvh;
+    inset: 0 0 -120px 0;
     z-index: -1;
     pointer-events: none;
     background: var(--f0);

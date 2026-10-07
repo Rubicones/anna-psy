@@ -31,7 +31,19 @@ const rootVars = `:root{${cssVars()}}`;
     <meta name="theme-color" content={palette.paper} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script is:inline>
-      document.documentElement.classList.replace('no-js', 'js');
+      // js flag + device quality tier (high = desktop, mid = phone/tablet, low = weak phone).
+      // Read by CSS (html[data-quality]) and by scripts/bg.ts. Override for testing: ?quality=low
+      (function () {
+        var d = document.documentElement, n = navigator;
+        d.classList.replace('no-js', 'js');
+        var forced = /[?&]quality=(high|mid|low)/.exec(location.search);
+        var coarse = matchMedia('(pointer: coarse)').matches;
+        var weak = (n.deviceMemory || 8) <= 4 || (n.hardwareConcurrency || 8) <= 4 || (n.connection && n.connection.saveData);
+        d.dataset.quality = forced ? forced[1] : !coarse ? 'high' : weak ? 'low' : 'mid';
+        // mirror of tierOverrides in scripts/bg.ts for the CSS-driven switches, so the first paint is already light
+        if (d.dataset.quality !== 'high') d.classList.add('bg-no-frost', 'bg-no-draw-filter');
+        if (d.dataset.quality === 'low') d.classList.add('bg-no-life');
+      })();
     </script>
     <Fonts />
     <style is:inline set:html={rootVars}></style>

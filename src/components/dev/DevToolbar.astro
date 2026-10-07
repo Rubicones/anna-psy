@@ -10,6 +10,7 @@
 <div class="devbar" data-devbar>
   <button type="button" class="devbar__toggle" aria-expanded="false" aria-controls="devbar-panel">Фон</button>
   <div class="devbar__panel" id="devbar-panel" hidden>
+    <p class="devbar__stats" data-stats></p>
     <div class="devbar__groups" data-groups></div>
     <div class="devbar__actions">
       <button type="button" data-copy>Скопировать изменения</button>
@@ -20,7 +21,7 @@
 </div>
 
 <script>
-  import { bg, bgDefaults, setBg, type BgConfig } from '~/scripts/bg';
+  import { bg, bgDefaults, setBg, tier, tierDefaults, type BgConfig } from '~/scripts/bg';
 
   type Key = keyof BgConfig;
   type Ctl = { key: Key; label: string; min?: number; max?: number; step?: number };
@@ -30,6 +31,7 @@
       ctls: [
         { key: 'fieldOn', label: 'поле включено (иначе CSS-градиент)' },
         { key: 'fieldPaused', label: 'пауза' },
+        { key: 'gradientNoise', label: 'градиентный шум (выкл = старый, гранёный)' },
         { key: 'speed', label: 'скорость течения', min: 0, max: 3, step: 0.05 },
         { key: 'scale', label: 'масштаб пятен (больше = мельче)', min: 0.5, max: 4, step: 0.05 },
         { key: 'warp', label: 'завихрения', min: 0, max: 2, step: 0.05 },
@@ -42,6 +44,7 @@
         { key: 'grainSize', label: 'размер крупинки, px холста', min: 1, max: 4, step: 0.5 },
         { key: 'ripple', label: 'рябь у курсора', min: 0, max: 3, step: 0.1 },
         { key: 'renderScale', label: 'разрешение пятен (зерно всегда полное)', min: 0.25, max: 1, step: 0.05 },
+        { key: 'adaptive', label: 'адаптивное разрешение (снижает, если кадры опаздывают)' },
         { key: 'maxDpr', label: 'макс. DPR холста', min: 1, max: 3, step: 0.25 },
         { key: 'fpsCap', label: 'лимит кадров', min: 10, max: 60, step: 5 },
         { key: 'canvasBlur', label: 'доп. размытие холста, px', min: 0, max: 30, step: 1 },
@@ -55,11 +58,14 @@
         { key: 'plaqueTex', label: 'гуашь на плашках' },
         { key: 'plaqueEdge', label: 'затемнение края плашек' },
         { key: 'pigmentTex', label: 'пигмент на цветных формах' },
+        { key: 'frostBlur', label: 'размытие под навигацией (backdrop-filter)' },
       ],
     },
     {
       title: 'SVG-фильтры',
       ctls: [
+        { key: 'drawFilter', label: 'фильтр дрожи на рисунках' },
+        { key: 'lifeOn', label: 'анимация рисунков (качание, хвост…)' },
         { key: 'boilOn', label: '«кипение» линий' },
         { key: 'boilFps', label: 'частота кипения, к/с', min: 1, max: 24, step: 1 },
         { key: 'boilScale', label: 'дрожь линий', min: 0, max: 10, step: 0.1 },
@@ -71,6 +77,8 @@
   ];
 
   const STORE = 'annacv:devbar';
+  /** shipped values for this device tier — the toolbar diffs and resets against these */
+  const defaults = tierDefaults();
   const root = document.querySelector<HTMLElement>('[data-devbar]')!;
   const panel = root.querySelector<HTMLElement>('.devbar__panel')!;
   const toggle = root.querySelector<HTMLButtonElement>('.devbar__toggle')!;
@@ -98,7 +106,7 @@
     const c = bg();
     const out: Record<string, unknown> = {};
     (Object.keys(bgDefaults) as Key[]).forEach((k) => {
-      if (c[k] !== bgDefaults[k]) out[k] = c[k];
+      if (c[k] !== defaults[k]) out[k] = c[k];
     });
     return out as Partial<BgConfig>;
   }
@@ -124,7 +132,7 @@
     lg.textContent = g.title;
     fs.append(lg);
     for (const ctl of g.ctls) {
-      const isBool = typeof bgDefaults[ctl.key] === 'boolean';
+      const isBool = typeof defaults[ctl.key] === 'boolean';
       const row = document.createElement('label');
       row.className = isBool ? 'devbar__row devbar__row--bool' : 'devbar__row';
       const input = document.createElement('input');
@@ -167,12 +175,21 @@
         const o = outs.get(k);
         if (o) o.textContent = String(c[k]);
       }
-      const changed = c[k] !== bgDefaults[k];
+      const changed = c[k] !== defaults[k];
       input.closest('.devbar__row')?.classList.toggle('is-changed', changed);
     });
   }
   syncUI();
   addEventListener('bg:change', syncUI);
+
+  // live stats: device tier, adaptive resolution, frame interval
+  const stats = root.querySelector<HTMLElement>('[data-stats]')!;
+  const tierName = { high: 'компьютер', mid: 'телефон', low: 'слабый телефон' }[tier()];
+  setInterval(() => {
+    if (panel.hidden) return;
+    const st = window.__bgStats;
+    stats.textContent = `уровень: ${tier()} (${tierName})` + (st ? ` · поле ${st.fieldPx} · авто ×${st.dyn} · кадр ${st.frameMs.toFixed(0)} мс` : '');
+  }, 500);
 
   // ── open / close (remembers state) ──
   const setOpen = (open: boolean) => {
@@ -193,16 +210,16 @@
 
   // ── actions ──
   root.querySelector('[data-copy]')?.addEventListener('click', async () => {
-    const text = JSON.stringify(diff(), null, 2);
+    const text = JSON.stringify({ tier: tier(), ...diff() }, null, 2);
     try {
       await navigator.clipboard.writeText(text);
-      status.textContent = Object.keys(diff()).length ? 'Скопировано — вставь мне в чат.' : 'Всё по умолчанию, копировать нечего.';
+      status.textContent = Object.keys(diff()).length ? `Скопировано (уровень ${tier()}) — вставь мне в чат.` : 'Всё по умолчанию, копировать нечего.';
     } catch {
       status.textContent = text;
     }
   });
   root.querySelector('[data-reset]')?.addEventListener('click', () => {
-    setBg({ ...bgDefaults });
+    setBg({ ...defaults });
     applyDom(bg());
     status.textContent = 'Сброшено к значениям по умолчанию.';
   });
@@ -308,6 +325,12 @@
     background: #f6f3ef;
     font: inherit;
     cursor: pointer;
+  }
+  .devbar__stats {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: #6b625a;
+    font-variant-numeric: tabular-nums;
   }
   .devbar__status {
     margin: 8px 0 0;

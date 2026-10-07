@@ -282,6 +282,23 @@ small,
     background-color: rgb(var(--c-paper-rgb) / 0.9);
   }
 }
+/* phones: backdrop blur over an animated canvas is recomputed every frame — use a denser plaque */
+.bg-no-frost .frost {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: rgb(var(--c-paper-rgb) / 0.9);
+}
+
+/* ───────────── performance switches (html classes, see scripts/bg.ts tiers) ───────────── */
+/* no displacement filter on drawings / hand-drawn lines */
+.bg-no-draw-filter [filter='url(#boil)'] {
+  filter: none;
+}
+/* below-the-fold sections skip layout & paint until they approach the viewport */
+.defer-render {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 1200px;
+}
 
 /* ───────────── motion preferences ───────────── */
 @media (prefers-reduced-motion: no-preference) {
@@ -310,11 +327,13 @@ small,
 .text-glow::before {
   content: '';
   position: absolute;
-  inset: calc(var(--glow-spread) * -1);
+  inset: calc(var(--glow-spread) * -0.5);
   z-index: -1;
-  border-radius: 3rem;
+  border-radius: 2rem;
   background: rgb(var(--c-paper-rgb) / var(--glow-a));
-  filter: blur(var(--glow-blur));
+  /* soft edge via box-shadow, not filter: blur() — the shadow of a rounded rect is drawn
+     from a cached nine-patch, a blur filter re-rasterises the whole area (slow on phones) */
+  box-shadow: 0 0 var(--glow-blur) calc(var(--glow-blur) * 0.35) rgb(var(--c-paper-rgb) / var(--glow-a));
   pointer-events: none;
 }
 
