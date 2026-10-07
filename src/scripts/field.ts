@@ -43,6 +43,8 @@ uniform vec2 uRes;
 uniform float uGrain;
 uniform float uFrame;
 uniform float uGrainSize;
+uniform vec2 uTexel;   // 1 / field texture size
+uniform float uSoft;   // soft-upsampling radius in field texels (0 = plain bilinear)
 
 // "Hash without Sine" (Dave Hoskins, MIT): no visible structure, time is a real 3rd dimension
 float hash13(vec3 p3){
@@ -52,7 +54,17 @@ float hash13(vec3 p3){
 }
 
 void main(){
-  vec3 col=texture2D(uTex,gl_FragCoord.xy/uRes).rgb;
+  vec2 uv=gl_FragCoord.xy/uRes;
+  vec3 col=texture2D(uTex,uv).rgb;
+  if(uSoft>0.){
+    // 3×3 tent over bilinear taps: a cheap blur that hides the texel grid of a tiny texture
+    vec2 o=uTexel*uSoft;
+    col=col*.25
+      +(texture2D(uTex,uv+vec2(o.x,0.)).rgb+texture2D(uTex,uv-vec2(o.x,0.)).rgb
+       +texture2D(uTex,uv+vec2(0.,o.y)).rgb+texture2D(uTex,uv-vec2(0.,o.y)).rgb)*.125
+      +(texture2D(uTex,uv+o).rgb+texture2D(uTex,uv-o).rgb
+       +texture2D(uTex,uv+vec2(o.x,-o.y)).rgb+texture2D(uTex,uv+vec2(-o.x,o.y)).rgb)*.0625;
+  }
   vec2 cell=floor(gl_FragCoord.xy/uGrainSize);
   // triangular distribution (sum of two) reads more like film than flat white noise
   float n=hash13(vec3(cell,uFrame))+hash13(vec3(cell+71.3,uFrame+19.7))-1.;
@@ -186,7 +198,15 @@ export function initField(root: HTMLElement): void {
   }
 
   let scrollDirty = true;
-  addEventListener('scroll', () => (scrollDirty = true), { passive: true });
+  let lastScroll = 0;
+  addEventListener(
+    'scroll',
+    () => {
+      scrollDirty = true;
+      lastScroll = performance.now();
+    },
+    { passive: true },
+  );
   addEventListener('resize', () => (scrollDirty = true), { passive: true });
   addEventListener('field:lock', (e) => {
     const d = (e as CustomEvent<Daytime | null>).detail;
@@ -225,7 +245,7 @@ export function initField(root: HTMLElement): void {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     uf = locs(fieldProg, ['uRes', 'uTime', 'uC', 'uPtr', 'uScale', 'uWarp', 'uDetail', 'uHalo', 'uRipple', 'uGrad']);
-    up = locs(presentProg, ['uTex', 'uRes', 'uGrain', 'uFrame', 'uGrainSize']);
+    up = locs(presentProg, ['uTex', 'uRes', 'uGrain', 'uFrame', 'uGrainSize', 'uTexel', 'uSoft']);
 
     tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -324,6 +344,12 @@ export function initField(root: HTMLElement): void {
     raf = 0;
     const c = bg();
     const dt = Math.min(0.1, last ? (now - last) / 1000 : 0.016);
+    // while the page scrolls, give the GPU to content: hold the field (it moves too slowly to notice)
+    if (c.pauseOnScroll && ready && now - lastScroll < 200) {
+      last = 0; // don't count the pause as a slow frame
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     if (!motion.reduced && last && now - last < 1000 / c.fpsCap - 2) {
       // fps cap (30 by default): the field is slow; spend the battery elsewhere
       raf = requestAnimationFrame(frame);
@@ -416,6 +442,8 @@ export function initField(root: HTMLElement): void {
     // frame counter for the grain: wraps after ~6 min at 12 fps — never visible
     gl.uniform1f(up.uFrame!, still || !c.grainAnimated ? 1 : Math.floor((now / 1000) * c.grainFps) % 4096);
     gl.uniform1f(up.uGrainSize!, Math.max(1, c.grainSize));
+    gl.uniform2f(up.uTexel!, 1 / fw, 1 / fh);
+    gl.uniform1f(up.uSoft!, c.soften);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     if (!ready) {

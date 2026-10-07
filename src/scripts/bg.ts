@@ -39,16 +39,20 @@ export const bgDefaults = {
   renderScale: 0.66,
   /** lower the field resolution automatically when frames run late, raise it back when calm */
   adaptive: true,
-  /** canvas resolution cap (device pixel ratio) */
+  /** canvas resolution cap (device pixel ratio); below 1 the browser upscales the canvas */
   maxDpr: 1.5,
   fpsCap: 30,
+  /** soft upsampling of the field texture (texels): hides low resolution on weak devices */
+  soften: 0,
+  /** skip field frames while the page is scrolling — leaves the GPU to page content */
+  pauseOnScroll: false,
   /** extra CSS blur on the canvas, px */
   canvasBlur: 0,
 
   // ── CSS layers ──
   /** light pool behind text on the field */
   glowA: 0.5,
-  glowBlur: 34,
+  glowBlur: 160,
   pigmentTex: true,
   plaqueTex: true,
   plaqueEdge: true,
@@ -75,23 +79,37 @@ export type Tier = 'high' | 'mid' | 'low';
  * high: desktop / fine pointer.
  * mid:  phones and tablets — field at CSS-px resolution, fewer octaves, no SVG filter on
  *       animated drawings, no backdrop blur.
- * low:  phones with ≤4 GB RAM / ≤4 cores / Save-Data — everything above, plus 24 fps,
- *       3 octaves, no idle animation.
+ * low:  phones with ≤4 GB RAM / ≤4 cores / Save-Data — everything above, plus a canvas at
+ *       0.6 CSS px, tiny field texture with soft upsampling, 20 fps, 3 octaves, no idle animation.
  */
 export const tierOverrides: Record<Tier, Partial<BgConfig>> = {
   high: {},
-  mid: { maxDpr: 1, renderScale: 0.5, detail: 4, drawFilter: false, boilOn: false, frostBlur: false, ripple: 0 },
-  low: {
+  mid: {
     maxDpr: 1,
-    renderScale: 0.4,
+    renderScale: 0.5,
+    detail: 4,
+    soften: 1,
+    pauseOnScroll: true,
+    drawFilter: false,
+    boilOn: false,
+    frostBlur: false,
+    ripple: 0,
+  },
+  // weak phones: hard cap. The field is soft by nature, so a tiny texture + soft upsampling
+  // reads the same, and the GPU/memory budget goes to page content instead.
+  low: {
+    maxDpr: 0.6,
+    renderScale: 0.35,
     detail: 3,
-    fpsCap: 24,
+    soften: 2,
+    fpsCap: 20,
+    grain: 0.035,
+    pauseOnScroll: true,
     drawFilter: false,
     boilOn: false,
     frostBlur: false,
     ripple: 0,
     lifeOn: false,
-    glowBlur: 24,
   },
 };
 

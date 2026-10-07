@@ -62,8 +62,8 @@
      Not a plaque — it keeps ink text at AA where the field gets dark (deep sea, dusk).
      Set --glow-a: 0 to see bare text. */
   --glow-a: 0.5;
-  --glow-blur: 34px;
-  --glow-spread: 1.1rem;
+  /* feather width of the glow's edge */
+  --glow-blur: 160px;
   --shadow-soft: 0 1px 0 rgb(var(--c-ink-rgb) / 0.04), 0 14px 30px -12px rgb(var(--c-ink-rgb) / 0.22);
 }
 
@@ -77,6 +77,10 @@
   margin: 0;
 }
 html {
+  /* With overflow only on <body> it propagates to the viewport, and mobile browsers still widen the
+     layout viewport to fit art that bleeds off-screen (page zooms out → more pixels to paint).
+     Clipping on <html> too keeps <body>'s clip on the body box itself. */
+  overflow-x: clip;
   background: var(--c-paper);
   color: var(--c-ink);
   font-family: var(--font-body);
@@ -325,15 +329,23 @@ small,
   isolation: isolate;
 }
 .text-glow::before {
+  /* plateau exactly behind the text, feathered by --glow-blur on every side */
+  --f: var(--glow-blur);
+  --fade: transparent, rgb(0 0 0 / 0.12) calc(var(--f) * 0.25), rgb(0 0 0 / 0.5) calc(var(--f) * 0.5),
+    rgb(0 0 0 / 0.88) calc(var(--f) * 0.75), #000 var(--f), #000 calc(100% - var(--f)),
+    rgb(0 0 0 / 0.88) calc(100% - var(--f) * 0.75), rgb(0 0 0 / 0.5) calc(100% - var(--f) * 0.5),
+    rgb(0 0 0 / 0.12) calc(100% - var(--f) * 0.25), transparent;
   content: '';
   position: absolute;
-  inset: calc(var(--glow-spread) * -0.5);
+  inset: calc(var(--f) * -1) calc(var(--f) * -1.2);
   z-index: -1;
-  border-radius: 2rem;
   background: rgb(var(--c-paper-rgb) / var(--glow-a));
-  /* soft edge via box-shadow, not filter: blur() — the shadow of a rounded rect is drawn
-     from a cached nine-patch, a blur filter re-rasterises the whole area (slow on phones) */
-  box-shadow: 0 0 var(--glow-blur) calc(var(--glow-blur) * 0.35) rgb(var(--c-paper-rgb) / var(--glow-a));
+  /* Edgeless: two eased linear fades intersected — no blur filter, no box-shadow seam.
+     (A solid core + blurred shadow leaves a visible step where they meet.) */
+  -webkit-mask: linear-gradient(to right, var(--fade)), linear-gradient(to bottom, var(--fade));
+  -webkit-mask-composite: source-in;
+  mask: linear-gradient(to right, var(--fade)), linear-gradient(to bottom, var(--fade));
+  mask-composite: intersect;
   pointer-events: none;
 }
 

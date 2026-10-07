@@ -53,6 +53,12 @@ const init = daytimes[initial].map((c, i) => `--f${i}:${c}`).join(';');
   :global(.field--gl.field--ready) .field__canvas {
     opacity: 1;
   }
+  /* once WebGL is on screen, stop painting the fallback: a full-screen blurred layer
+     costs raster time and GPU memory even when it's fully covered */
+  :global(.field--gl.field--ready:not(.field--off)) .field__fallback {
+    visibility: hidden;
+    transition: visibility 0s 1.3s;
+  }
   /* dev toolbar: field switched off → CSS fallback only */
   :global(.field--off) .field__canvas {
     opacity: 0 !important;
