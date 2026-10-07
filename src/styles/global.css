@@ -294,14 +294,13 @@ small,
 }
 
 /* ───────────── performance switches (html classes, see scripts/bg.ts tiers) ───────────── */
+/* while the page scrolls, idle drawing animations hold still (scripts/perf-classes.ts) */
+.is-scrolling .life {
+  animation-play-state: paused !important;
+}
 /* no displacement filter on drawings / hand-drawn lines */
 .bg-no-draw-filter [filter='url(#boil)'] {
   filter: none;
-}
-/* below-the-fold sections skip layout & paint until they approach the viewport */
-.defer-render {
-  content-visibility: auto;
-  contain-intrinsic-size: auto none auto 1200px;
 }
 
 /* ───────────── motion preferences ───────────── */

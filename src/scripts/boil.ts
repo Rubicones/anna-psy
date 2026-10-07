@@ -26,6 +26,8 @@ export function initBoil(): void {
   let frame = 0;
   let timer = 0;
   const tick = () => {
+    // hold the boil while the page scrolls: every step re-runs the filter on all visible drawings
+    if (bg().pauseOnScroll && document.documentElement.classList.contains('is-scrolling')) return;
     frame = (frame + 1) % SEEDS.length;
     const base = SEEDS[frame] ?? 3;
     turbs.forEach((t, i) => t.setAttribute('seed', String(base + i * 2)));

@@ -361,15 +361,15 @@ export function initField(root: HTMLElement): void {
       frameMs = frameMs ? frameMs * 0.9 + iv * 0.1 : iv;
       const budget = 1000 / c.fpsCap;
       if (c.adaptive && gl) {
-        if (frameMs > budget * 1.35) {
+        if (frameMs > budget * 1.2) {
           slow += dt;
           calm = 0;
         } else if (frameMs < budget * 1.12) {
           calm += dt;
           slow = 0;
         }
-        if (slow > 1 && dyn > 0.5) {
-          dyn = Math.max(0.5, +(dyn - 0.15).toFixed(2));
+        if (slow > 0.5 && dyn > 0.35) {
+          dyn = Math.max(0.35, +(dyn - 0.15).toFixed(2));
           slow = 0;
           fboDirty = true;
         } else if (calm > 6 && dyn < 1) {

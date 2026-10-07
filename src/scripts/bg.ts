@@ -23,7 +23,7 @@ export const bgDefaults = {
   /** domain-warp strength: 0 = plain fbm clouds, 1 = default swirls */
   warp: 1,
   /** fbm octaves 1–6: fewer = smoother, cheaper, less fine shimmer */
-  detail: 5,
+  detail: 4,
   /** bright defocused halo mix */
   halo: 0.7,
   /** in-shader film grain — the only full-screen grain layer */
@@ -36,16 +36,16 @@ export const bgDefaults = {
   /** pointer ripple strength (mouse only) */
   ripple: 1,
   /** field pass resolution, relative to the canvas (grain is always full canvas res) */
-  renderScale: 0.66,
+  renderScale: 0.45,
   /** lower the field resolution automatically when frames run late, raise it back when calm */
   adaptive: true,
   /** canvas resolution cap (device pixel ratio); below 1 the browser upscales the canvas */
-  maxDpr: 1.5,
+  maxDpr: 1.25,
   fpsCap: 30,
   /** soft upsampling of the field texture (texels): hides low resolution on weak devices */
-  soften: 0,
-  /** skip field frames while the page is scrolling — leaves the GPU to page content */
-  pauseOnScroll: false,
+  soften: 1,
+  /** skip field frames (and line boil) while the page is scrolling — leaves the GPU to page content */
+  pauseOnScroll: true,
   /** extra CSS blur on the canvas, px */
   canvasBlur: 0,
 
@@ -86,10 +86,9 @@ export const tierOverrides: Record<Tier, Partial<BgConfig>> = {
   high: {},
   mid: {
     maxDpr: 1,
-    renderScale: 0.5,
+    renderScale: 0.45,
     detail: 4,
-    soften: 1,
-    pauseOnScroll: true,
+    soften: 1.25,
     drawFilter: false,
     boilOn: false,
     frostBlur: false,
@@ -104,7 +103,6 @@ export const tierOverrides: Record<Tier, Partial<BgConfig>> = {
     soften: 2,
     fpsCap: 20,
     grain: 0.035,
-    pauseOnScroll: true,
     drawFilter: false,
     boilOn: false,
     frostBlur: false,

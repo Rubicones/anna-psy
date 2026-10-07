@@ -11,7 +11,7 @@ interface Props {
 const { id, n, title, daytime, class: className } = Astro.props;
 ---
 
-<section class:list={['sg', 'defer-render', className]} id={id} data-daytime={daytime} aria-labelledby={`${id}-h`}>
+<section class:list={['sg', className]} id={id} data-daytime={daytime} aria-labelledby={`${id}-h`}>
   <header class="sg__head wrap">
     <p class="sg__n hand" aria-hidden="true">{n}</p>
     <div class="sg__title text-glow">
