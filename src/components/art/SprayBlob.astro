@@ -1,0 +1,46 @@
+---
+/**
+ * A soft colour blob with a sprayed, speckled edge and pigment texture.
+ * Purely decorative. Size it with width/height via `style` or a class.
+ */
+import { colorVar, type PaletteName } from '~/lib/palette';
+
+interface Props {
+  tone?: PaletteName;
+  /** second colour for the inner glow */
+  glow?: PaletteName;
+  shape?: 'a' | 'b' | 'c';
+  rotate?: number;
+  /** extra defocus in px, on top of the spray edge */
+  blur?: number;
+  class?: string;
+  style?: string;
+}
+const { tone = 'sun', glow, shape = 'a', rotate = 0, blur = 0, class: className, style } = Astro.props;
+const vars = [
+  `--bg:${colorVar(tone)}`,
+  glow && `--glow:${colorVar(glow)}`,
+  `--r:var(--blob-${shape})`,
+  `--rot:${rotate}deg`,
+  blur && `--defocus:${blur}px`,
+  style,
+]
+  .filter(Boolean)
+  .join(';');
+---
+
+<span class:list={['spray-blob', className]} style={vars} aria-hidden="true"></span>
+
+<style>
+  .spray-blob {
+    display: block;
+    border-radius: var(--r);
+    rotate: var(--rot);
+    background-color: var(--bg);
+    background-image:
+      var(--tex-pigment),
+      radial-gradient(60% 55% at 38% 34%, color-mix(in srgb, var(--glow, var(--c-white)) 55%, transparent), transparent 70%);
+    background-size: var(--tex-pigment-size), 100% 100%;
+    filter: url(#spray) blur(var(--defocus, 0px));
+  }
+</style>

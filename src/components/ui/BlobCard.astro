@@ -1,0 +1,53 @@
+---
+/**
+ * Content on an irregular colour blob (sprayed edge, pigment texture).
+ * Ink text on palette fills passes AA; keep generous padding — the spray eats ~1rem of edge.
+ */
+import { colorVar, type PaletteName } from '~/lib/palette';
+
+interface Props {
+  as?: 'article' | 'div' | 'li' | 'section';
+  tone?: PaletteName;
+  glow?: PaletteName;
+  /** 'panel' keeps text corners safe; a/b/c are rounder, for short content */
+  shape?: 'panel' | 'panel-b' | 'a' | 'b' | 'c';
+  tilt?: number;
+  class?: string;
+}
+const { as: Tag = 'div', tone = 'sun', glow = 'white', shape = 'panel', tilt = 0, class: className } = Astro.props;
+---
+
+<Tag class:list={['blobcard', className]} style={`--bg:${colorVar(tone)};--glow:${colorVar(glow)};--r:var(--${shape.startsWith('panel') ? shape : 'blob-' + shape});--tilt:${tilt}deg`}>
+  <span class="blobcard__shape" aria-hidden="true"></span>
+  <div class="blobcard__body"><slot /></div>
+</Tag>
+
+<style>
+  .blobcard {
+    position: relative;
+    isolation: isolate;
+    padding: clamp(2rem, 1.5rem + 2.5vw, 3.25rem) clamp(1.75rem, 1.25rem + 2.5vw, 3rem);
+  }
+  .blobcard__shape {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--r);
+    rotate: var(--tilt);
+    background-color: var(--bg);
+    background-image:
+      var(--tex-pigment),
+      radial-gradient(55% 50% at 32% 30%, color-mix(in srgb, var(--glow) 50%, transparent), transparent 72%);
+    background-size: var(--tex-pigment-size), 100% 100%;
+    filter: url(#spray);
+    transition: border-radius 1.2s var(--ease-squish);
+  }
+  @media (hover: hover) {
+    .blobcard:hover .blobcard__shape {
+      border-radius: var(--panel-b);
+    }
+  }
+  .blobcard__body {
+    position: relative;
+  }
+</style>

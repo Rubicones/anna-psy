@@ -1,0 +1,49 @@
+---
+import '~/styles/global.css';
+import ArtDefs from '~/components/art/ArtDefs.astro';
+import GradientField from '~/components/art/GradientField.astro';
+import DevToolbar from '~/components/dev/DevToolbar.astro';
+import Fonts from '~/components/Fonts.astro';
+import { cssVars, palette, type Daytime } from '~/lib/palette';
+import { site } from '~/site.config';
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** palette of the first screen */
+  daytime?: Daytime;
+  noindex?: boolean;
+}
+
+const { title, description = site.description, daytime = 'sea', noindex = false } = Astro.props;
+const fullTitle = title ? `${title} — ${site.name}` : `${site.name}, ${site.role}`;
+const rootVars = `:root{${cssVars()}}`;
+---
+
+<!doctype html>
+<html lang={site.lang} class="no-js" data-daytime={daytime}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <meta name="theme-color" content={palette.paper} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline>
+      document.documentElement.classList.replace('no-js', 'js');
+    </script>
+    <Fonts />
+    <style is:inline set:html={rootVars}></style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">К содержанию</a>
+    <ArtDefs />
+    <GradientField initial={daytime} />
+    <slot />
+    <script>
+      import '~/scripts/art';
+    </script>
+    {import.meta.env.DEV && <DevToolbar />}
+  </body>
+</html>

@@ -1,0 +1,57 @@
+---
+/**
+ * Link with a hand-drawn underline. Drawn on hover/focus, and permanently when `current`
+ * (used for the active nav section — set aria-current from the scroll spy later).
+ */
+import { wobble } from '~/lib/wobble';
+
+interface Props {
+  href: string;
+  current?: boolean;
+  seed?: number;
+  class?: string;
+}
+const { href, current = false, seed = 9, class: className } = Astro.props;
+const d = wobble([[3, 9], [60, 6], [120, 9.5], [196, 5]], { seed, amp: 1.4, wave: 30 });
+---
+
+<a class:list={['hand-u', className]} href={href} aria-current={current ? 'true' : undefined}>
+  <slot />
+  <svg class="hand-u__line" viewBox="0 0 200 14" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <path d={d} vector-effect="non-scaling-stroke"></path>
+  </svg>
+</a>
+
+<style>
+  .hand-u {
+    position: relative;
+    display: inline-block;
+    padding-block: 0.2em 0.35em;
+    text-decoration: none;
+  }
+  .hand-u__line {
+    position: absolute;
+    left: -4%;
+    bottom: -0.1em;
+    width: 108%;
+    height: 0.6em;
+    overflow: visible;
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path 0.55s var(--ease-soft);
+    filter: url(#still-ui);
+  }
+  .hand-u__line path {
+    fill: none;
+    stroke: var(--c-coral);
+    stroke-width: 3px;
+    stroke-linecap: round;
+  }
+  .hand-u:hover .hand-u__line,
+  .hand-u:focus-visible .hand-u__line,
+  .hand-u[aria-current] .hand-u__line {
+    clip-path: inset(0 0 0 0);
+  }
+  .hand-u[aria-current] .hand-u__line path {
+    stroke: var(--c-ink);
+  }
+</style>

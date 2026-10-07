@@ -1,0 +1,326 @@
+/*
+ * Global styles: tokens (non-colour), reset, type, textures, focus, utilities.
+ * Colour tokens are generated from src/lib/palette.ts and injected in BaseLayout as --c-*.
+ */
+
+/* ───────────── tokens ───────────── */
+:root {
+  color-scheme: light;
+  interpolate-size: allow-keywords; /* lets <details> animate to height:auto (progressive) */
+
+  --font-head: 'Geologica', 'Geologica Fallback', system-ui, sans-serif;
+  --font-body: 'Onest', 'Onest Fallback', system-ui, sans-serif;
+  --font-hand: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+
+  /* fluid type scale, 360 → 1440 */
+  --step--1: clamp(0.86rem, 0.82rem + 0.18vw, 0.96rem);
+  --step-0: clamp(1.0625rem, 1.01rem + 0.25vw, 1.2rem);
+  --step-1: clamp(1.25rem, 1.12rem + 0.6vw, 1.55rem);
+  --step-2: clamp(1.55rem, 1.3rem + 1.2vw, 2.25rem);
+  --step-3: clamp(1.95rem, 1.5rem + 2.3vw, 3.4rem);
+  --step-4: clamp(2.5rem, 1.7rem + 4.2vw, 5.4rem);
+  --step-5: clamp(3.1rem, 1.6rem + 7.6vw, 8.4rem);
+  --hand-size: clamp(1.35rem, 1.2rem + 0.7vw, 1.8rem);
+
+  /* Geologica axes — soft by default; SHRP stays 0 */
+  --wght: 470;
+  --crsv: 0;
+  --slnt: 0;
+
+  --measure: 65ch;
+  --gutter: clamp(1rem, 4.5vw, 3.5rem);
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-4: clamp(2.5rem, 1.8rem + 3vw, 4.5rem);
+  --space-5: clamp(4rem, 2.5rem + 7vw, 9rem);
+
+  --ink-w: 2.6px;
+  --ease-out: cubic-bezier(0.22, 0.8, 0.24, 1);
+  --ease-soft: cubic-bezier(0.45, 0.05, 0.25, 1);
+  --ease-squish: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* irregular "drawn by hand" radii */
+  --blob-a: 47% 53% 44% 56% / 58% 46% 54% 42%;
+  --blob-b: 56% 44% 52% 48% / 45% 57% 43% 55%;
+  --blob-c: 40% 60% 58% 42% / 52% 40% 60% 48%;
+  --scrap: 6px 14px 9px 18px / 16px 7px 15px 8px;
+  /* for surfaces that carry text: soft but never eats the corners */
+  --panel: 42px 64px 50px 72px / 58px 40px 68px 46px;
+  --panel-b: 70px 44px 80px 52px / 46px 66px 50px 74px;
+
+  /* surface textures — alpha-only overlays, readable sources in ./textures/*.svg
+     plaque:  gouache, no grain — for the few structural plaques (nav, accordion, panels, cards)
+     pigment: soft relief + density clouds — for coloured fills (buttons, blobs) */
+  --tex-plaque: url('./textures/gouache.svg');
+  --tex-plaque-size: 520px 520px;
+  --plaque-edge: inset 0 0 18px rgb(140 90 60 / 0.13);
+  --tex-pigment: url('./textures/pigment.svg');
+  --tex-pigment-size: 360px 360px;
+
+  /* text straight on the field: a soft, edgeless pool of light behind the text block.
+     Not a plaque — it keeps ink text at AA where the field gets dark (deep sea, dusk).
+     Set --glow-a: 0 to see bare text. */
+  --glow-a: 0.5;
+  --glow-blur: 34px;
+  --glow-spread: 1.1rem;
+  --shadow-soft: 0 1px 0 rgb(var(--c-ink-rgb) / 0.04), 0 14px 30px -12px rgb(var(--c-ink-rgb) / 0.22);
+}
+
+/* ───────────── reset ───────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  background: var(--c-paper);
+  color: var(--c-ink);
+  font-family: var(--font-body);
+  font-size: 100%;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  hanging-punctuation: first last;
+}
+body {
+  min-height: 100dvh;
+  font-size: var(--step-0);
+  overflow-x: clip;
+  text-rendering: optimizeLegibility;
+}
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+img {
+  height: auto;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: inherit;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+}
+
+/* ───────────── type ───────────── */
+h1,
+h2,
+h3,
+h4,
+.h-display,
+.h1,
+.h2,
+.h3 {
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-variation-settings: 'wght' var(--wght), 'CRSV' var(--crsv), 'slnt' var(--slnt), 'SHRP' 0;
+  line-height: 1.08;
+  letter-spacing: -0.018em;
+}
+.h-display {
+  --wght: 430;
+  font-size: var(--step-5);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+h1,
+.h1 {
+  font-size: var(--step-4);
+}
+h2,
+.h2 {
+  font-size: var(--step-3);
+}
+h3,
+.h3 {
+  --wght: 520;
+  font-size: var(--step-2);
+  line-height: 1.15;
+}
+h4 {
+  --wght: 560;
+  font-size: var(--step-1);
+}
+.lead {
+  font-size: var(--step-1);
+  line-height: 1.5;
+  max-width: 38ch;
+}
+.prose {
+  max-width: var(--measure);
+}
+.prose > * + * {
+  margin-top: 0.85em;
+}
+.hand {
+  font-family: var(--font-hand);
+  font-weight: 500;
+  font-size: var(--hand-size);
+  line-height: 1.1;
+  letter-spacing: 0.005em;
+}
+.eyebrow {
+  font-family: var(--font-hand);
+  font-size: var(--hand-size);
+  line-height: 1;
+  display: inline-block;
+  rotate: -2deg;
+}
+small,
+.small {
+  font-size: var(--step--1);
+}
+
+/* ───────────── texture ───────────── */
+/* put on the element that carries the colour */
+.tex-plaque {
+  background-image: var(--tex-plaque);
+  background-size: var(--tex-plaque-size);
+  box-shadow: var(--plaque-edge);
+}
+.tex-pigment {
+  background-image: var(--tex-pigment);
+  background-size: var(--tex-pigment-size);
+}
+
+/* ───────────── focus ───────────── */
+/* default: double ring (ink + paper halo) so it reads on any background */
+:focus-visible {
+  outline: 3px solid var(--c-ink);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 9px rgb(var(--c-paper-rgb) / 0.92);
+}
+/* hand-drawn ring: element provides position:relative and a free ::after */
+.hand-focus:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.hand-focus:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 3px solid var(--c-ink);
+  border-radius: var(--blob-b);
+  box-shadow: 0 0 0 3px rgb(var(--c-paper-rgb) / 0.95), inset 0 0 0 3px rgb(var(--c-paper-rgb) / 0.95);
+  filter: url(#boil-ui);
+  pointer-events: none;
+}
+@media (forced-colors: active) {
+  :focus-visible,
+  .hand-focus:focus-visible {
+    outline: 3px solid CanvasText;
+  }
+}
+
+/* ───────────── utilities ───────────── */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: -100px;
+  z-index: 1001;
+  padding: 0.6rem 1rem;
+  background: var(--c-paper);
+  border-radius: var(--blob-a);
+}
+.skip-link:focus {
+  top: 1rem;
+}
+.wrap {
+  width: min(100% - 2 * var(--gutter), 80rem);
+  margin-inline: auto;
+}
+
+/* frosted plaque — only where structure needs it (sticky nav, overlays) */
+.frost {
+  position: relative;
+  background-color: rgb(var(--c-paper-rgb) / 0.62);
+  background-image: var(--tex-plaque);
+  background-size: var(--tex-plaque-size);
+  box-shadow: var(--plaque-edge);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  backdrop-filter: blur(22px) saturate(1.15);
+  border-radius: var(--panel);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .frost {
+    background-color: rgb(var(--c-paper-rgb) / 0.9);
+  }
+}
+
+/* ───────────── motion preferences ───────────── */
+@media (prefers-reduced-motion: no-preference) {
+  html:focus-within {
+    scroll-behavior: smooth;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* text directly on the field (see --glow-a) */
+:where(.text-glow) {
+  position: relative;
+}
+.text-glow {
+  isolation: isolate;
+}
+.text-glow::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--glow-spread) * -1);
+  z-index: -1;
+  border-radius: 3rem;
+  background: rgb(var(--c-paper-rgb) / var(--glow-a));
+  filter: blur(var(--glow-blur));
+  pointer-events: none;
+}
+
+/* wobbly-glass hover for images / card media (never on text) */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .wobble-hover:hover > * {
+    filter: url(#glass);
+  }
+}

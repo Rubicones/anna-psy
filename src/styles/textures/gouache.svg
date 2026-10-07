@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="520">
+  <!--
+    Gouache: for the few plaques that must exist (nav, accordion, control panels, cards).
+    No grain at all — only slow, soft variation in pigment density. Alpha-only overlay.
+    dense: darker, warmer patches · thin: lighter patches. Strength = 4th row of each matrix.
+    The "slightly darker towards the edge" part is CSS: var(--plaque-edge) (inset shadow).
+  -->
+  <filter id="p" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.007" numOctaves="3" seed="5" stitchTiles="stitch" result="c" />
+    <feColorMatrix in="c" result="dense" values="0 0 0 0 0.60  0 0 0 0 0.40  0 0 0 0 0.30  -0.45 0 0 0 0.25" />
+    <feColorMatrix in="c" result="thin" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.98  0 0.5 0 0 -0.26" />
+    <feMerge>
+      <feMergeNode in="dense" />
+      <feMergeNode in="thin" />
+    </feMerge>
+  </filter>
+  <rect width="100%" height="100%" filter="url(#p)" />
+</svg>

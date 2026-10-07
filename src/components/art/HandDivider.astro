@@ -1,0 +1,47 @@
+---
+/** Hand-drawn divider: a lazy wavy line with a sprout. Boils, draws on. */
+import { line, wobble } from '~/lib/wobble';
+
+interface Props {
+  seed?: number;
+  tone?: string;
+  class?: string;
+}
+const { seed = 4, tone = 'var(--c-ink)', class: className } = Astro.props;
+const main = wobble([[6, 30], [120, 22], [240, 34], [360, 24], [470, 31], [560, 26]], { seed, amp: 1.6, wave: 40 });
+const stem = wobble([[560, 26], [574, 14], [578, 4]], { seed: seed + 1, amp: 0.6 });
+const leafA = wobble([[574, 14], [564, 6], [558, 10], [572, 16]], { seed: seed + 2, amp: 0.5 });
+const leafB = line([577, 9], [590, 3], { seed: seed + 3, amp: 0.5, sag: 3 });
+---
+
+<svg class:list={['divider', className]} viewBox="0 0 600 40" aria-hidden="true" focusable="false" style={`color:${tone}`} data-draw>
+  <g filter="url(#boil)">
+    {[main, stem, leafA, leafB].map((d, i) => <path d={d} pathLength="1" style={`--i:${i * 3}`} />)}
+  </g>
+</svg>
+
+<style>
+  .divider {
+    width: min(100%, 36rem);
+    height: auto;
+    overflow: visible;
+    margin-inline: auto;
+  }
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html.js) .divider path {
+      stroke-dasharray: 1 1.02;
+      stroke-dashoffset: 1.01;
+    }
+    :global(html.js) .divider:global(.is-drawn) path {
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1.4s var(--ease-soft) calc(var(--i) * 120ms);
+    }
+  }
+</style>

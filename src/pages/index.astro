@@ -1,0 +1,27 @@
+---
+/** Phase 2 replaces this with the hero + time-of-day journey. */
+import Illustration from '~/components/art/Illustration.astro';
+import Button from '~/components/ui/Button.astro';
+import BaseLayout from '~/layouts/BaseLayout.astro';
+import { site } from '~/site.config';
+---
+
+<BaseLayout daytime="sea">
+  <main id="main" class="soon" data-daytime="sea">
+    <Illustration name="sevenPetal" size={260} ink={3.4} draw />
+    <h1 class="visually-hidden">{site.name}</h1>
+    <Button href="/styleguide">Стайлгайд</Button>
+  </main>
+</BaseLayout>
+
+<style>
+  .soon {
+    min-height: 100svh;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 2rem;
+    padding: var(--gutter);
+    text-align: center;
+  }
+</style>

@@ -1,0 +1,229 @@
+---
+/**
+ * Renders a hand-drawn illustration from the library as inline SVG.
+ * All path generation happens at build time; zero JS per drawing.
+ *
+ * Decorative by default (aria-hidden). Pass `label` to make it meaningful (role="img").
+ */
+import { illustrations, type IlloName } from '~/art';
+
+interface Props {
+  name: IlloName;
+  /** rendered width in px; height follows the drawing's aspect */
+  size?: number;
+  /** line colour (any CSS colour / var). White by default — the cover formula. */
+  tone?: string;
+  accent?: string;
+  /** scribble-fill colour; implies `filled` */
+  fill?: string;
+  filled?: boolean;
+  /** marker weight in px at the rendered size */
+  ink?: number;
+  /** variant seed: same subject, different hand */
+  variant?: number;
+  boil?: boolean;
+  /** draw-on when scrolled into view */
+  draw?: boolean;
+  /** idle micro-life */
+  life?: boolean;
+  label?: string;
+  class?: string;
+  style?: string;
+}
+
+const {
+  name,
+  size,
+  tone,
+  accent,
+  fill,
+  filled = Boolean(fill),
+  ink = 2.6,
+  variant = 0,
+  boil = true,
+  draw = false,
+  life = true,
+  label,
+  class: className,
+  style,
+} = Astro.props;
+
+const def = illustrations[name](variant);
+const width = size ?? def.w;
+const height = Math.round((width * def.h) / def.w);
+// stroke width in viewBox units so it reads as `ink` px at the default size
+const sw = +((ink * def.w) / width).toFixed(3);
+
+let i = 0;
+const groups = def.groups.map((g) => ({
+  ...g,
+  paths: g.paths
+    .filter((p) => filled || !p.fillOnly)
+    .map((p) => ({ ...p, i: i++ })),
+}));
+
+const vars = [
+  `--sw:${sw}`,
+  tone && `color:${tone}`,
+  accent && `--illo-accent:${accent}`,
+  fill && `--illo-fill:${fill}`,
+  style,
+]
+  .filter(Boolean)
+  .join(';');
+---
+
+<svg
+  class:list={['illo', `illo--${name}`, { 'is-draw': draw, 'has-life': life }, className]}
+  viewBox={`0 0 ${def.w} ${def.h}`}
+  width={width}
+  height={height}
+  style={vars}
+  role={label ? 'img' : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : 'true'}
+  focusable="false"
+  data-draw={draw ? '' : undefined}
+>
+  <g filter={boil ? 'url(#boil)' : undefined}>
+    {
+      groups.map((g) => (
+        <g
+          class:list={['life', g.life && `life--${g.life}`]}
+          style={[g.origin && `transform-origin:${g.origin[0]}px ${g.origin[1]}px`, g.delay !== undefined && `--delay:${g.delay.toFixed(2)}s`]
+            .filter(Boolean)
+            .join(';') || undefined}
+        >
+          {g.paths.map((p) => (
+            <path
+              d={p.d}
+              class:list={[p.tone && p.tone !== 'line' && `t-${p.tone}`]}
+              style={[`--i:${p.i}`, p.w && `--w:${p.w}`].filter(Boolean).join(';')}
+              pathLength="1"
+            />
+          ))}
+        </g>
+      ))
+    }
+  </g>
+</svg>
+
+<style>
+  .illo {
+    overflow: visible;
+    color: var(--c-white);
+    flex: none;
+  }
+  .illo path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: calc(var(--sw) * var(--w, 1));
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .illo .t-accent {
+    stroke: var(--illo-accent, currentColor);
+  }
+  .illo .t-fill {
+    stroke: var(--illo-fill, var(--illo-accent, currentColor));
+  }
+
+  /* ── draw-on: hidden only when JS is present and motion is allowed ── */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html.js) .illo.is-draw path {
+      stroke-dasharray: 1 1.02;
+      stroke-dashoffset: 1.01;
+      opacity: 0;
+    }
+    :global(html.js) .illo.is-draw.is-drawn path {
+      stroke-dashoffset: 0;
+      opacity: 1;
+      transition:
+        stroke-dashoffset 1.25s var(--ease-soft) calc(var(--i) * 85ms),
+        opacity 0s linear calc(var(--i) * 85ms);
+    }
+  }
+
+  /* ── idle micro-life ── */
+  .life {
+    transform-box: view-box;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .has-life .life--sway {
+      animation: sway 6.5s var(--ease-soft) var(--delay, 0s) infinite alternate;
+    }
+    .has-life .life--sway-soft {
+      animation: sway-soft 9s var(--ease-soft) var(--delay, 0s) infinite alternate;
+    }
+    .has-life .life--tail {
+      animation: tail 3.4s var(--ease-soft) var(--delay, 0s) infinite alternate;
+    }
+    .has-life .life--dip {
+      animation: dip 11s var(--ease-soft) var(--delay, -3s) infinite;
+    }
+    .has-life .life--hop {
+      animation: hop 5.5s linear var(--delay, 0s) infinite;
+    }
+    .has-life .life--blink {
+      animation: blink 6s linear var(--delay, 0s) infinite;
+    }
+    .has-life .life--spin {
+      animation: spin 90s linear var(--delay, 0s) infinite;
+    }
+    .has-life .life--crawl {
+      animation: crawl 4.5s var(--ease-soft) var(--delay, 0s) infinite;
+    }
+    .has-life .life--bob {
+      animation: bob 7s var(--ease-soft) var(--delay, 0s) infinite alternate;
+    }
+    .has-life .life--beat {
+      animation: beat 4.2s var(--ease-soft) var(--delay, 0s) infinite;
+    }
+  }
+
+  @keyframes sway {
+    from { rotate: -2.6deg; }
+    to { rotate: 2.6deg; }
+  }
+  @keyframes sway-soft {
+    from { rotate: -4deg; }
+    to { rotate: 3deg; }
+  }
+  @keyframes tail {
+    from { rotate: 4deg; }
+    to { rotate: -9deg; }
+  }
+  @keyframes dip {
+    0%, 38% { rotate: 0deg; }
+    50%, 58% { rotate: -26deg; }
+    54% { rotate: -23deg; }
+    72%, 100% { rotate: 0deg; }
+  }
+  @keyframes hop {
+    0%, 70% { translate: 0 0; }
+    75% { translate: 0 -11px; }
+    80% { translate: 0 0; }
+    84% { translate: 0 -5px; }
+    88%, 100% { translate: 0 0; }
+  }
+  @keyframes blink {
+    0%, 94%, 100% { scale: 1 1; }
+    96% { scale: 1 0.1; }
+  }
+  @keyframes spin {
+    to { rotate: 360deg; }
+  }
+  @keyframes crawl {
+    0%, 100% { scale: 1 1; }
+    45% { scale: 1.045 0.985; }
+  }
+  @keyframes bob {
+    from { translate: 0 -2px; rotate: -3deg; }
+    to { translate: 0 3px; rotate: 2deg; }
+  }
+  @keyframes beat {
+    0%, 70%, 100% { scale: 1; }
+    78% { scale: 1.07; }
+    86% { scale: 0.98; }
+  }
+</style>

@@ -1,0 +1,120 @@
+---
+/**
+ * Blob button. `warm` = the primary CTA (sun → orange → coral, pigment texture, sprayed edge).
+ * `paper` = quiet secondary with a hand-drawn outline that boils on hover/focus.
+ * Text is always ink: AA on every fill.
+ */
+import type { HTMLAttributes } from 'astro/types';
+
+type Props = {
+  variant?: 'warm' | 'paper';
+  href?: string;
+  external?: boolean;
+  type?: 'button' | 'submit';
+  class?: string;
+} & Omit<HTMLAttributes<'button'>, 'type' | 'class'>;
+
+const { variant = 'warm', href, external = false, type = 'button', class: className, ...rest } = Astro.props;
+const Tag = href ? 'a' : 'button';
+const attrs = href
+  ? { href, ...(external ? { target: '_blank', rel: 'noopener' } : {}) }
+  : { type };
+---
+
+<Tag class:list={['btn', `btn--${variant}`, 'hand-focus', 'boils', className]} {...attrs} {...rest}>
+  {variant === 'paper' && <span class="btn__line" aria-hidden="true" />}
+  <span class="btn__label"><slot /></span>
+  {external && <span class="visually-hidden"> (откроется в новой вкладке)</span>}
+</Tag>
+
+<style>
+  .btn {
+    --wght: 540;
+    --crsv: 0;
+    --slnt: 0;
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    min-height: 3.25rem;
+    padding: 0.85em 1.75em 0.95em;
+    border: 0;
+    background: none;
+    color: var(--c-ink);
+    font-family: var(--font-head);
+    font-size: var(--step-1);
+    line-height: 1.1;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: translate 0.45s var(--ease-squish);
+  }
+  .btn__label {
+    font-variation-settings: 'wght' var(--wght), 'CRSV' var(--crsv), 'slnt' var(--slnt), 'SHRP' 0;
+    transition: font-variation-settings 0.5s var(--ease-soft);
+  }
+  .btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--blob-a);
+    transition:
+      border-radius 0.8s var(--ease-squish),
+      scale 0.45s var(--ease-squish);
+  }
+  .btn--warm::before {
+    background-color: var(--c-orange);
+    background-image:
+      var(--tex-pigment),
+      radial-gradient(90% 120% at 28% 22%, var(--c-sun), transparent 62%),
+      radial-gradient(80% 110% at 88% 90%, var(--c-coral), transparent 70%);
+    background-size: var(--tex-pigment-size), 100% 100%, 100% 100%;
+    /* same sprayed, speckled edge as the colour blobs (BlobCard / SprayBlob) */
+    inset: -3px -4px;
+    filter: url(#spray);
+  }
+  .btn--paper::before {
+    background-color: rgb(var(--c-paper-rgb) / 0.88);
+    background-image: var(--tex-plaque);
+    background-size: var(--tex-plaque-size);
+  }
+  .btn__line {
+    position: absolute;
+    inset: -3px -5px;
+    z-index: -1;
+    border: var(--ink-w) solid var(--c-ink);
+    border-radius: var(--blob-c);
+    filter: url(#still-ui);
+    pointer-events: none;
+    transition: border-radius 0.8s var(--ease-squish);
+  }
+
+  @media (hover: hover) {
+    .btn:hover {
+      --crsv: 1;
+      --slnt: -7;
+      --wght: 580;
+    }
+    .btn:hover::before {
+      border-radius: var(--blob-b);
+      scale: 1.04 1.08;
+    }
+    .btn:hover .btn__line {
+      border-radius: var(--blob-a);
+      filter: url(#boil-ui);
+    }
+  }
+  .btn:focus-visible .btn__line {
+    filter: url(#boil-ui);
+  }
+  .btn:active::before {
+    scale: 0.97 0.92;
+    transition-duration: 0.12s;
+  }
+  .btn:active {
+    translate: 0 1px;
+  }
+</style>

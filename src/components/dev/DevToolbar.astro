@@ -1,0 +1,323 @@
+---
+/**
+ * Dev-only background toolbar (rendered by BaseLayout when import.meta.env.DEV).
+ * Live switches for every background layer: WebGL field, text glow, plaque/pigment textures,
+ * line boil and SVG edge filters. Settings reset on reload (nothing is stored); "Скопировать" copies
+ * only the values that differ from `bgDefaults` — paste them back to bake them in.
+ */
+---
+
+<div class="devbar" data-devbar>
+  <button type="button" class="devbar__toggle" aria-expanded="false" aria-controls="devbar-panel">Фон</button>
+  <div class="devbar__panel" id="devbar-panel" hidden>
+    <div class="devbar__groups" data-groups></div>
+    <div class="devbar__actions">
+      <button type="button" data-copy>Скопировать изменения</button>
+      <button type="button" data-reset>Сбросить</button>
+    </div>
+    <p class="devbar__status" data-status aria-live="polite"></p>
+  </div>
+</div>
+
+<script>
+  import { bg, bgDefaults, setBg, type BgConfig } from '~/scripts/bg';
+
+  type Key = keyof BgConfig;
+  type Ctl = { key: Key; label: string; min?: number; max?: number; step?: number };
+  const groups: { title: string; ctls: Ctl[] }[] = [
+    {
+      title: 'Поле (WebGL)',
+      ctls: [
+        { key: 'fieldOn', label: 'поле включено (иначе CSS-градиент)' },
+        { key: 'fieldPaused', label: 'пауза' },
+        { key: 'speed', label: 'скорость течения', min: 0, max: 3, step: 0.05 },
+        { key: 'scale', label: 'масштаб пятен (больше = мельче)', min: 0.5, max: 4, step: 0.05 },
+        { key: 'warp', label: 'завихрения', min: 0, max: 2, step: 0.05 },
+        { key: 'detail', label: 'детализация (октавы)', min: 1, max: 6, step: 1 },
+        { key: 'halo', label: 'светлый ореол', min: 0, max: 1, step: 0.05 },
+        { key: 'grainOn', label: 'зерно поля (единственный сплошной слой зерна)' },
+        { key: 'grain', label: 'сила зерна', min: 0, max: 0.2, step: 0.005 },
+        { key: 'grainAnimated', label: 'зерно анимировано (выкл = статичное)' },
+        { key: 'grainFps', label: 'частота зерна, к/с', min: 1, max: 60, step: 1 },
+        { key: 'grainSize', label: 'размер крупинки, px холста', min: 1, max: 4, step: 0.5 },
+        { key: 'ripple', label: 'рябь у курсора', min: 0, max: 3, step: 0.1 },
+        { key: 'renderScale', label: 'разрешение пятен (зерно всегда полное)', min: 0.25, max: 1, step: 0.05 },
+        { key: 'maxDpr', label: 'макс. DPR холста', min: 1, max: 3, step: 0.25 },
+        { key: 'fpsCap', label: 'лимит кадров', min: 10, max: 60, step: 5 },
+        { key: 'canvasBlur', label: 'доп. размытие холста, px', min: 0, max: 30, step: 1 },
+      ],
+    },
+    {
+      title: 'Текст и плашки',
+      ctls: [
+        { key: 'glowA', label: 'свечение под текстом', min: 0, max: 1, step: 0.05 },
+        { key: 'glowBlur', label: 'размытие свечения, px', min: 0, max: 80, step: 1 },
+        { key: 'plaqueTex', label: 'гуашь на плашках' },
+        { key: 'plaqueEdge', label: 'затемнение края плашек' },
+        { key: 'pigmentTex', label: 'пигмент на цветных формах' },
+      ],
+    },
+    {
+      title: 'SVG-фильтры',
+      ctls: [
+        { key: 'boilOn', label: '«кипение» линий' },
+        { key: 'boilFps', label: 'частота кипения, к/с', min: 1, max: 24, step: 1 },
+        { key: 'boilScale', label: 'дрожь линий', min: 0, max: 10, step: 0.1 },
+        { key: 'sprayScale', label: 'спрей: разброс края', min: 0, max: 40, step: 1 },
+        { key: 'sprayBlur', label: 'спрей: мягкость края', min: 0, max: 12, step: 0.5 },
+        { key: 'roughScale', label: 'неровный край плашек', min: 0, max: 12, step: 0.5 },
+      ],
+    },
+  ];
+
+  const STORE = 'annacv:devbar';
+  const root = document.querySelector<HTMLElement>('[data-devbar]')!;
+  const panel = root.querySelector<HTMLElement>('.devbar__panel')!;
+  const toggle = root.querySelector<HTMLButtonElement>('.devbar__toggle')!;
+  const host = root.querySelector<HTMLElement>('[data-groups]')!;
+  const status = root.querySelector<HTMLElement>('[data-status]')!;
+
+  // ── apply the parts that live in CSS / SVG (field + boil read bg() themselves) ──
+  const css = document.documentElement.style;
+  const attr = (sel: string, name: string, v: number) => document.querySelector(sel)?.setAttribute(name, String(v));
+  function applyDom(c: BgConfig): void {
+    css.setProperty('--glow-a', String(c.glowA));
+    css.setProperty('--glow-blur', `${c.glowBlur}px`);
+    c.plaqueTex ? css.removeProperty('--tex-plaque') : css.setProperty('--tex-plaque', 'none');
+    c.plaqueEdge ? css.removeProperty('--plaque-edge') : css.setProperty('--plaque-edge', 'none');
+    c.pigmentTex ? css.removeProperty('--tex-pigment') : css.setProperty('--tex-pigment', 'none');
+    attr('#boil feDisplacementMap', 'scale', c.boilScale);
+    attr('#boil-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
+    attr('#still-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
+    attr('#spray feDisplacementMap', 'scale', c.sprayScale);
+    attr('#spray feGaussianBlur', 'stdDeviation', c.sprayBlur);
+    attr('#rough feDisplacementMap', 'scale', c.roughScale);
+  }
+
+  function diff(): Partial<BgConfig> {
+    const c = bg();
+    const out: Record<string, unknown> = {};
+    (Object.keys(bgDefaults) as Key[]).forEach((k) => {
+      if (c[k] !== bgDefaults[k]) out[k] = c[k];
+    });
+    return out as Partial<BgConfig>;
+  }
+  function update(patch: Partial<BgConfig>): void {
+    setBg(patch);
+    applyDom(bg());
+  }
+
+  // settings are not persisted; drop anything an older version of the toolbar stored
+  try {
+    localStorage.removeItem(STORE);
+  } catch {
+    /* ignore */
+  }
+  applyDom(bg());
+
+  // ── build UI ──
+  const inputs = new Map<Key, HTMLInputElement>();
+  const outs = new Map<Key, HTMLOutputElement>();
+  for (const g of groups) {
+    const fs = document.createElement('fieldset');
+    const lg = document.createElement('legend');
+    lg.textContent = g.title;
+    fs.append(lg);
+    for (const ctl of g.ctls) {
+      const isBool = typeof bgDefaults[ctl.key] === 'boolean';
+      const row = document.createElement('label');
+      row.className = isBool ? 'devbar__row devbar__row--bool' : 'devbar__row';
+      const input = document.createElement('input');
+      const name = document.createElement('span');
+      name.className = 'devbar__name';
+      name.textContent = ctl.label;
+      if (isBool) {
+        input.type = 'checkbox';
+        input.setAttribute('role', 'switch');
+        input.addEventListener('change', () => update({ [ctl.key]: input.checked } as Partial<BgConfig>));
+        row.append(input, name);
+      } else {
+        input.type = 'range';
+        input.min = String(ctl.min);
+        input.max = String(ctl.max);
+        input.step = String(ctl.step);
+        const out = document.createElement('output');
+        outs.set(ctl.key, out);
+        input.addEventListener('input', () => {
+          out.textContent = input.value;
+          update({ [ctl.key]: Number(input.value) } as Partial<BgConfig>);
+        });
+        const head = document.createElement('span');
+        head.className = 'devbar__head';
+        head.append(name, out);
+        row.append(head, input);
+      }
+      inputs.set(ctl.key, input);
+      fs.append(row);
+    }
+    host.append(fs);
+  }
+
+  function syncUI(): void {
+    const c = bg();
+    inputs.forEach((input, k) => {
+      if (input.type === 'checkbox') input.checked = Boolean(c[k]);
+      else {
+        input.value = String(c[k]);
+        const o = outs.get(k);
+        if (o) o.textContent = String(c[k]);
+      }
+      const changed = c[k] !== bgDefaults[k];
+      input.closest('.devbar__row')?.classList.toggle('is-changed', changed);
+    });
+  }
+  syncUI();
+  addEventListener('bg:change', syncUI);
+
+  // ── open / close (remembers state) ──
+  const setOpen = (open: boolean) => {
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    try {
+      sessionStorage.setItem(STORE + ':open', open ? '1' : '');
+    } catch {
+      /* ignore */
+    }
+  };
+  toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+  try {
+    if (sessionStorage.getItem(STORE + ':open')) setOpen(true);
+  } catch {
+    /* ignore */
+  }
+
+  // ── actions ──
+  root.querySelector('[data-copy]')?.addEventListener('click', async () => {
+    const text = JSON.stringify(diff(), null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = Object.keys(diff()).length ? 'Скопировано — вставь мне в чат.' : 'Всё по умолчанию, копировать нечего.';
+    } catch {
+      status.textContent = text;
+    }
+  });
+  root.querySelector('[data-reset]')?.addEventListener('click', () => {
+    setBg({ ...bgDefaults });
+    applyDom(bg());
+    status.textContent = 'Сброшено к значениям по умолчанию.';
+  });
+</script>
+
+<style>
+  /* rows are built in JS, so they carry no Astro scope attribute: style them through :global */
+  .devbar {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    z-index: 2000;
+    font: 13px/1.35 system-ui, -apple-system, sans-serif;
+    color: #1e1b18;
+  }
+  .devbar__toggle {
+    padding: 7px 12px;
+    border: 1px solid rgb(0 0 0 / 0.15);
+    border-radius: 8px;
+    background: #fff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+  }
+  .devbar__panel {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    width: 300px;
+    max-height: min(78vh, 760px);
+    overflow-y: auto;
+    padding: 10px 12px 12px;
+    border: 1px solid rgb(0 0 0 / 0.12);
+    border-radius: 10px;
+    background: rgb(255 255 255 / 0.97);
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+  }
+  .devbar__panel[hidden] {
+    display: none;
+  }
+  .devbar :global(fieldset) {
+    margin: 0 0 10px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .devbar :global(legend) {
+    padding: 6px 0 4px;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b625a;
+  }
+  .devbar :global(.devbar__row) {
+    display: grid;
+    gap: 2px;
+    padding: 5px 6px;
+    margin: 0 -6px;
+    border-radius: 6px;
+  }
+  .devbar :global(.devbar__row.is-changed) {
+    background: #fff4d6;
+  }
+  .devbar :global(.devbar__row--bool) {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .devbar :global(.devbar__head) {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .devbar :global(output) {
+    font-variant-numeric: tabular-nums;
+    color: #6b625a;
+  }
+  .devbar :global(input[type='range']) {
+    display: block;
+    width: 100%;
+    margin: 0;
+    accent-color: #2c2620;
+  }
+  .devbar :global(input[type='checkbox']) {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #2c2620;
+  }
+  .devbar__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .devbar__actions button {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid rgb(0 0 0 / 0.18);
+    border-radius: 7px;
+    background: #f6f3ef;
+    font: inherit;
+    cursor: pointer;
+  }
+  .devbar__status {
+    margin: 8px 0 0;
+    color: #6b625a;
+    white-space: pre-wrap;
+    font-size: 12px;
+  }
+  .devbar :global(:focus-visible) {
+    outline: 2px solid #2c2620;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+</style>

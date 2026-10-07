@@ -1,0 +1,61 @@
+---
+/**
+ * Organic section boundary: a hand-wobbled wave filled with a colour, plus an optional ink line.
+ * Place at the top or bottom edge of a section. Never a straight horizontal line.
+ */
+import { colorVar, type PaletteName } from '~/lib/palette';
+import { rng, wobble, type Pt } from '~/lib/wobble';
+
+interface Props {
+  tone?: PaletteName;
+  /** 'top' = wave on top, fill below. 'bottom' = flipped. */
+  edge?: 'top' | 'bottom';
+  seed?: number;
+  /** height in px */
+  height?: number;
+  line?: boolean;
+  class?: string;
+}
+const { tone = 'paper', edge = 'top', seed = 21, height = 70, line = false, class: className } = Astro.props;
+const rand = rng(seed);
+const W = 1440, H = 100;
+const pts: Pt[] = [];
+for (let x = -40; x <= W + 40; x += 150 + rand() * 90) pts.push([x, 22 + rand() * 46]);
+pts.push([W + 40, 30 + rand() * 30]);
+const crest = wobble(pts, { seed: seed + 1, amp: 2.4, wave: 70, step: 14 });
+const fillD = `${crest}L${W + 40} ${H + 2}L-40 ${H + 2}Z`;
+---
+
+<svg
+  class:list={['wavy', `wavy--${edge}`, className]}
+  viewBox={`0 0 ${W} ${H}`}
+  preserveAspectRatio="none"
+  style={`--h:${height}px;--fill:${colorVar(tone)}`}
+  aria-hidden="true"
+  focusable="false"
+>
+  <path class="wavy__fill" d={fillD}></path>
+  {line && <path class="wavy__line" d={crest} vector-effect="non-scaling-stroke" filter="url(#boil)" />}
+</svg>
+
+<style>
+  .wavy {
+    display: block;
+    width: 100%;
+    height: var(--h);
+    overflow: visible;
+    pointer-events: none;
+  }
+  .wavy--bottom {
+    scale: 1 -1;
+  }
+  .wavy__fill {
+    fill: var(--fill);
+  }
+  .wavy__line {
+    fill: none;
+    stroke: var(--c-ink);
+    stroke-width: 2.6px;
+    stroke-linecap: round;
+  }
+</style>

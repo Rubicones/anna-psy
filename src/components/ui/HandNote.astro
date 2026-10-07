@@ -1,0 +1,75 @@
+---
+/** Margin note in Caveat, optionally with a scribbled arrow. Real text — readable and selectable. */
+import { wobble } from '~/lib/wobble';
+
+interface Props {
+  arrow?: 'left' | 'right' | 'down' | 'up' | 'none';
+  tilt?: number;
+  seed?: number;
+  class?: string;
+  as?: 'p' | 'span' | 'div';
+}
+const { arrow = 'none', tilt = -3, seed = 5, class: className, as: Tag = 'p' } = Astro.props;
+
+// arrow drawn pointing right in a 90×50 box; rotated via CSS for other directions
+const shaft = wobble([[4, 36], [30, 18], [60, 14], [84, 22]], { seed, amp: 1.1 });
+const head = wobble([[70, 10], [85, 22], [68, 32]], { seed: seed + 1, amp: 0.6, jitter: 0.8 });
+const rot = { right: 0, left: 180, down: 90, up: -90, none: 0 }[arrow];
+---
+
+<Tag class:list={['note', 'hand', `note--${arrow}`, className]} style={`--tilt:${tilt}deg`}>
+  <slot />
+  {
+    arrow !== 'none' && (
+      <svg class="note__arrow" viewBox="0 0 90 44" aria-hidden="true" focusable="false" style={`--rot:${rot}deg`}>
+        <g filter="url(#boil)">
+          <path d={shaft} />
+          <path d={head} />
+        </g>
+      </svg>
+    )
+  }
+</Tag>
+
+<style>
+  .note {
+    position: relative;
+    display: inline-block;
+    rotate: var(--tilt);
+    color: var(--c-ink);
+    max-width: 22ch;
+  }
+  .note__arrow {
+    position: absolute;
+    width: 3.6em;
+    height: auto;
+    overflow: visible;
+    rotate: var(--rot);
+    pointer-events: none;
+  }
+  .note__arrow path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .note--right .note__arrow {
+    left: 100%;
+    top: 0.1em;
+    margin-left: 0.2em;
+  }
+  .note--left .note__arrow {
+    right: 100%;
+    top: 0.1em;
+    margin-right: 0.2em;
+  }
+  .note--down .note__arrow {
+    left: 30%;
+    top: 100%;
+  }
+  .note--up .note__arrow {
+    left: 30%;
+    bottom: 100%;
+  }
+</style>

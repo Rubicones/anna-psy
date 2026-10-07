@@ -1,0 +1,139 @@
+---
+/**
+ * Accessible accordion on native <details>/<summary>: keyboard, screen readers and
+ * find-in-page work with zero JS. Open/close animates where ::details-content +
+ * interpolate-size are supported; elsewhere it simply snaps open (progressive).
+ */
+import { render, type CollectionEntry } from 'astro:content';
+import { line } from '~/lib/wobble';
+
+interface Props {
+  entries: CollectionEntry<'faq'>[];
+  /** give a name to make it exclusive (one open at a time) */
+  name?: string;
+  class?: string;
+}
+const { entries, name, class: className } = Astro.props;
+const items = await Promise.all(
+  entries
+    .slice()
+    .sort((a, b) => a.data.order - b.data.order)
+    .map(async (entry, i) => ({ entry, i, Content: (await render(entry)).Content })),
+);
+const plus = (s: number) => [line([12, 3], [12, 21], { seed: s, amp: 0.7, sag: 1 }), line([3, 12.5], [21, 11.5], { seed: s + 1, amp: 0.7, sag: -1 })];
+---
+
+<div class:list={['acc', className]}>
+  {
+    items.map(({ entry, i, Content }) => (
+      <details class="acc__item" name={name} style={`--tilt:${i % 2 ? 0.5 : -0.6}deg`}>
+        <summary class="acc__q hand-focus">
+          <span class="acc__q-text">{entry.data.question}</span>
+          <svg class="acc__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            {plus(30 + i * 7).map((d) => (
+              <path d={d} />
+            ))}
+          </svg>
+        </summary>
+        <div class="acc__a prose">
+          <Content />
+        </div>
+      </details>
+    ))
+  }
+</div>
+
+<style>
+  .acc {
+    display: grid;
+    gap: 1rem;
+  }
+  .acc__item {
+    position: relative;
+    isolation: isolate;
+    rotate: var(--tilt);
+  }
+  .acc__item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--scrap);
+    background-color: rgb(var(--c-paper-rgb) / 0.94);
+    background-image: var(--tex-plaque);
+    background-size: var(--tex-plaque-size);
+    box-shadow: var(--plaque-edge);
+    filter: url(#rough) drop-shadow(0 10px 14px rgb(var(--c-ink-rgb) / 0.1));
+  }
+  .acc__q {
+    --wght: 520;
+    --crsv: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.1rem clamp(1rem, 3vw, 1.6rem);
+    list-style: none;
+    cursor: pointer;
+    font-family: var(--font-head);
+    font-size: var(--step-1);
+    line-height: 1.25;
+    font-variation-settings: 'wght' var(--wght), 'CRSV' var(--crsv), 'SHRP' 0;
+    transition: font-variation-settings 0.45s var(--ease-soft);
+  }
+  .acc__q::-webkit-details-marker {
+    display: none;
+  }
+  @media (hover: hover) {
+    .acc__q:hover {
+      --crsv: 1;
+    }
+  }
+  .acc__icon {
+    flex: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    overflow: visible;
+    color: var(--c-coral);
+    transition: rotate 0.55s var(--ease-squish);
+  }
+  .acc__icon path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.6;
+    stroke-linecap: round;
+  }
+  .acc__item[open] .acc__icon {
+    rotate: 135deg;
+  }
+  .acc__a {
+    padding: 0 clamp(1rem, 3vw, 1.6rem) 1.4rem;
+    opacity: 0;
+    filter: blur(3px);
+    transition:
+      opacity 0.45s var(--ease-soft),
+      filter 0.45s var(--ease-soft);
+  }
+  .acc__item[open] .acc__a {
+    opacity: 1;
+    filter: none;
+  }
+
+  /* animated height (Chromium today, others snap) */
+  .acc__item::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size 0.5s var(--ease-soft),
+      content-visibility 0.5s allow-discrete;
+  }
+  .acc__item[open]::details-content {
+    block-size: auto;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .acc__item::details-content {
+      transition: none;
+    }
+  }
+</style>

@@ -1,0 +1,67 @@
+---
+/**
+ * A slightly rotated plaque: gouache texture, softly uneven edge. Use only where structure needs a surface.
+ * The edge filter lives on ::before only — text is never distorted.
+ * Put images / drawings in a `.wobble-hover` wrapper to get the wobbly-glass hover.
+ */
+import { colorVar, type PaletteName } from '~/lib/palette';
+
+interface Props {
+  as?: 'article' | 'div' | 'li' | 'section' | 'aside';
+  tone?: PaletteName;
+  tilt?: number;
+  tape?: boolean;
+  class?: string;
+  style?: string;
+}
+const { as: Tag = 'div', tone = 'paper', tilt = -1.2, tape = false, class: className, style } = Astro.props;
+---
+
+<Tag class:list={['scrap', className]} style={[`--bg:${colorVar(tone)}`, `--tilt:${tilt}deg`, style].filter(Boolean).join(';')}>
+  {tape && <span class="scrap__tape" aria-hidden="true" />}
+  <slot />
+</Tag>
+
+<style>
+  .scrap {
+    position: relative;
+    isolation: isolate;
+    padding: clamp(1.25rem, 1rem + 1.5vw, 2.1rem);
+    rotate: var(--tilt);
+    transition:
+      rotate 0.7s var(--ease-squish),
+      translate 0.6s var(--ease-squish);
+  }
+  .scrap::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--scrap);
+    background-color: var(--bg);
+    background-image: var(--tex-plaque);
+    background-size: var(--tex-plaque-size);
+    box-shadow: var(--plaque-edge);
+    filter: url(#rough) drop-shadow(0 14px 16px rgb(var(--c-ink-rgb) / 0.13));
+  }
+  .scrap__tape {
+    position: absolute;
+    top: -0.8rem;
+    left: 50%;
+    width: 5.5rem;
+    height: 1.6rem;
+    translate: -50% 0;
+    rotate: calc(var(--tilt) * -2.5 + 2deg);
+    background-color: rgb(var(--c-peach-rgb) / 0.7);
+    background-image: var(--tex-pigment);
+    background-size: var(--tex-pigment-size);
+    border-radius: 2px 4px 3px 2px;
+    filter: url(#rough);
+  }
+  @media (hover: hover) {
+    .scrap:hover {
+      rotate: calc(var(--tilt) * 0.35);
+      translate: 0 -4px;
+    }
+  }
+</style>
