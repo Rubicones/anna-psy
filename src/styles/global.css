@@ -58,6 +58,15 @@
   --tex-pigment: url('./textures/pigment.svg');
   --tex-pigment-size: 360px 360px;
 
+  /* sprayed-edge shape masks (pre-rendered images, see scripts/gen-masks.ts) */
+  --mask-a: url('./masks/spray-a.svg');
+  --mask-b: url('./masks/spray-b.svg');
+  --mask-c: url('./masks/spray-c.svg');
+  --mask-panel: url('./masks/spray-panel.svg');
+  --mask-a-soft: url('./masks/spray-a-soft.svg');
+  --mask-b-soft: url('./masks/spray-b-soft.svg');
+  --mask-c-soft: url('./masks/spray-c-soft.svg');
+
   /* text straight on the field: a soft, edgeless pool of light behind the text block.
      Not a plaque — it keeps ink text at AA where the field gets dark (deep sea, dusk).
      Set --glow-a: 0 to see bare text. */
@@ -318,6 +327,12 @@ small,
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* sprayed colour shape: set --m to one of the --mask-* tokens */
+.spray-mask {
+  -webkit-mask: var(--m) center / 100% 100% no-repeat;
+  mask: var(--m) center / 100% 100% no-repeat;
 }
 
 /* text directly on the field (see --glow-a) */

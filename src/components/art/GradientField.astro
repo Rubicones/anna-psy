@@ -1,7 +1,8 @@
 ---
 /**
- * Fixed living gradient behind all content. The WebGL canvas fades in over a
- * static CSS gradient that uses the same palette (also the no-WebGL / no-JS fallback).
+ * Fixed living gradient behind all content: a tiny WebGL canvas stretched to the viewport,
+ * a static grain layer on top (jittered by the compositor), and a CSS gradient underneath
+ * as the no-WebGL / no-JS fallback.
  */
 import { daytimes, type Daytime } from '~/lib/palette';
 
@@ -16,6 +17,7 @@ const init = daytimes[initial].map((c, i) => `--f${i}:${c}`).join(';');
 <div class="field" data-field style={init} aria-hidden="true">
   <div class="field__fallback"></div>
   <canvas class="field__canvas"></canvas>
+  <canvas class="field__grain"></canvas>
 </div>
 
 <style>
@@ -58,6 +60,16 @@ const init = daytimes[initial].map((c, i) => `--f${i}:${c}`).join(';');
   :global(.field--gl.field--ready:not(.field--off)) .field__fallback {
     visibility: hidden;
     transition: visibility 0s 1.3s;
+  }
+  /* static random noise, jittered by the compositor (scripts/grain.ts) */
+  .field__grain {
+    position: absolute;
+    left: -48px;
+    top: -48px;
+    image-rendering: pixelated;
+    will-change: transform;
+    pointer-events: none;
+    opacity: 0.12;
   }
   /* dev toolbar: field switched off → CSS fallback only */
   :global(.field--off) .field__canvas {

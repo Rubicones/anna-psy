@@ -41,7 +41,8 @@ const rootVars = `:root{${cssVars()}}`;
         var weak = (n.deviceMemory || 8) <= 4 || (n.hardwareConcurrency || 8) <= 4 || (n.connection && n.connection.saveData);
         d.dataset.quality = forced ? forced[1] : !coarse ? 'high' : weak ? 'low' : 'mid';
         // mirror of tierOverrides in scripts/bg.ts for the CSS-driven switches, so the first paint is already light
-        if (d.dataset.quality !== 'high') d.classList.add('bg-no-frost', 'bg-no-draw-filter');
+        d.classList.add('bg-no-frost');
+        if (d.dataset.quality !== 'high') d.classList.add('bg-no-draw-filter');
         if (d.dataset.quality === 'low') d.classList.add('bg-no-life');
       })();
     </script>

@@ -37,19 +37,20 @@
         { key: 'warp', label: 'завихрения', min: 0, max: 2, step: 0.05 },
         { key: 'detail', label: 'детализация (октавы)', min: 1, max: 6, step: 1 },
         { key: 'halo', label: 'светлый ореол', min: 0, max: 1, step: 0.05 },
-        { key: 'grainOn', label: 'зерно поля (единственный сплошной слой зерна)' },
-        { key: 'grain', label: 'сила зерна', min: 0, max: 0.2, step: 0.005 },
-        { key: 'grainAnimated', label: 'зерно анимировано (выкл = статичное)' },
-        { key: 'grainFps', label: 'частота зерна, к/с', min: 1, max: 60, step: 1 },
-        { key: 'grainSize', label: 'размер крупинки, px холста', min: 1, max: 4, step: 0.5 },
         { key: 'ripple', label: 'рябь у курсора', min: 0, max: 3, step: 0.1 },
-        { key: 'renderScale', label: 'разрешение пятен (зерно всегда полное)', min: 0.25, max: 1, step: 0.05 },
-        { key: 'adaptive', label: 'адаптивное разрешение (снижает, если кадры опаздывают)' },
-        { key: 'maxDpr', label: 'макс. DPR холста (<1 — браузер растягивает)', min: 0.4, max: 3, step: 0.05 },
-        { key: 'soften', label: 'мягкость апскейла поля, текселей', min: 0, max: 4, step: 0.25 },
-        { key: 'pauseOnScroll', label: 'замирать во время скролла' },
+        { key: 'resolution', label: 'размер холста поля (доля CSS-px)', min: 0.08, max: 1, step: 0.01 },
         { key: 'fpsCap', label: 'лимит кадров', min: 10, max: 60, step: 2 },
-        { key: 'canvasBlur', label: 'доп. размытие холста, px', min: 0, max: 30, step: 1 },
+        { key: 'canvasBlur', label: 'доп. размытие холста, px (дорого)', min: 0, max: 30, step: 1 },
+      ],
+    },
+    {
+      title: 'Зерно',
+      ctls: [
+        { key: 'grainOn', label: 'зерно поверх поля' },
+        { key: 'grain', label: 'сила зерна', min: 0, max: 0.4, step: 0.01 },
+        { key: 'grainAnimated', label: 'зерно анимировано (выкл = статичное)' },
+        { key: 'grainFps', label: 'частота зерна, к/с', min: 1, max: 30, step: 1 },
+        { key: 'grainSize', label: 'размер крупинки, px', min: 1, max: 4, step: 1 },
       ],
     },
     {
@@ -71,9 +72,7 @@
         { key: 'boilOn', label: '«кипение» линий' },
         { key: 'boilFps', label: 'частота кипения, к/с', min: 1, max: 24, step: 1 },
         { key: 'boilScale', label: 'дрожь линий', min: 0, max: 10, step: 0.1 },
-        { key: 'sprayScale', label: 'спрей: разброс края', min: 0, max: 40, step: 1 },
-        { key: 'sprayBlur', label: 'спрей: мягкость края', min: 0, max: 12, step: 0.5 },
-        { key: 'roughScale', label: 'неровный край плашек', min: 0, max: 12, step: 0.5 },
+        { key: 'pauseOnScroll', label: 'рисунки замирают во время скролла' },
       ],
     },
   ];
@@ -94,14 +93,11 @@
     css.setProperty('--glow-a', String(c.glowA));
     css.setProperty('--glow-blur', `${c.glowBlur}px`);
     c.plaqueTex ? css.removeProperty('--tex-plaque') : css.setProperty('--tex-plaque', 'none');
-    c.plaqueEdge ? css.removeProperty('--plaque-edge') : css.setProperty('--plaque-edge', 'none');
+    c.plaqueEdge ? css.removeProperty('--plaque-edge') : css.setProperty('--plaque-edge', '0 0 0 0 transparent');
     c.pigmentTex ? css.removeProperty('--tex-pigment') : css.setProperty('--tex-pigment', 'none');
     attr('#boil feDisplacementMap', 'scale', c.boilScale);
     attr('#boil-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
     attr('#still-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
-    attr('#spray feDisplacementMap', 'scale', c.sprayScale);
-    attr('#spray feGaussianBlur', 'stdDeviation', c.sprayBlur);
-    attr('#rough feDisplacementMap', 'scale', c.roughScale);
   }
 
   function diff(): Partial<BgConfig> {
@@ -184,13 +180,13 @@
   syncUI();
   addEventListener('bg:change', syncUI);
 
-  // live stats: device tier, adaptive resolution, frame interval
+  // live stats: device tier, field canvas size, frame interval
   const stats = root.querySelector<HTMLElement>('[data-stats]')!;
   const tierName = { high: 'компьютер', mid: 'телефон', low: 'слабый телефон' }[tier()];
   setInterval(() => {
     if (panel.hidden) return;
     const st = window.__bgStats;
-    stats.textContent = `уровень: ${tier()} (${tierName})` + (st ? ` · поле ${st.fieldPx} · авто ×${st.dyn} · кадр ${st.frameMs.toFixed(0)} мс` : '');
+    stats.textContent = `уровень: ${tier()} (${tierName})` + (st ? ` · холст поля ${st.fieldPx} · кадр ${st.frameMs.toFixed(0)} мс` : '');
   }, 500);
 
   // ── open / close (remembers state) ──

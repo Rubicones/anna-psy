@@ -4,9 +4,8 @@
  *  #boil     — line boil for SVG drawings (seed stepped at ~10 fps by scripts/boil.ts)
  *  #boil-ui  — same, tuned for HTML elements (focus rings, hand-drawn underlines)
  *  #still-ui — #boil-ui frozen in one frame (resting UI outlines)
- *  #spray    — sprayed, speckled edge for colour blobs
- *  #rough    — softly uneven paper edge for paper scraps (applied to a pseudo-element, never to text)
  *  #glass    — wobbly-glass hover for images / card media
+ * Sprayed edges of colour shapes are pre-rendered mask images (styles/masks), not live filters.
  */
 ---
 
@@ -24,15 +23,6 @@
     <filter id="still-ui" x="-10%" y="-30%" width="120%" height="160%" color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="5"></feTurbulence>
       <feDisplacementMap in="SourceGraphic" scale="3" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
-    </filter>
-    <filter id="spray" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="8" result="speck"></feTurbulence>
-      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="soft"></feGaussianBlur>
-      <feDisplacementMap in="soft" in2="speck" scale="22" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
-    </filter>
-    <filter id="rough" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="12"></feTurbulence>
-      <feDisplacementMap in="SourceGraphic" scale="3.5" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
     </filter>
     <filter id="glass" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
       <feTurbulence type="turbulence" baseFrequency="0.011 0.019" numOctaves="2" seed="4">

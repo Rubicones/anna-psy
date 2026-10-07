@@ -62,8 +62,9 @@ const plus = (s: number) => [line([12, 3], [12, 21], { seed: s, amp: 0.7, sag: 1
     background-color: rgb(var(--c-paper-rgb) / 0.94);
     background-image: var(--tex-plaque);
     background-size: var(--tex-plaque-size);
-    box-shadow: var(--plaque-edge);
-    filter: url(#rough) drop-shadow(0 10px 14px rgb(var(--c-ink-rgb) / 0.1));
+    box-shadow:
+      var(--plaque-edge),
+      0 10px 18px -10px rgb(var(--c-ink-rgb) / 0.16);
   }
   .acc__q {
     --wght: 520;

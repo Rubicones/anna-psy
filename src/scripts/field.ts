@@ -1,18 +1,17 @@
 /**
- * The living gradient field: one fixed full-viewport WebGL canvas.
- * Two passes:
- *   1. field  — domain-warped fbm → slow, defocused colour blobs, rendered at LOW resolution
- *               into a texture (it's blurry by nature, so this is cheap and invisible);
- *   2. present — the texture is upscaled to the full-resolution canvas and film grain is added
- *               per canvas pixel, so grain stays crisp and never gets smeared by upscaling.
- * Grain is a 3D hash of (x, y, frame): every grain frame is fresh, uncorrelated noise —
- * not the previous frame shifted — so no lines crawl across the page.
+ * The living gradient field — cheap by design.
  *
- * Scroll = time of day: every element in <body> with [data-daytime] anchors a palette at its centre;
- * between two anchors the palette blends, so the day drifts as you read.
+ * The field is soft and blurry by nature, so it is rendered into a TINY canvas
+ * (≈ 1/4 of CSS pixels by default) and the browser stretches it to the viewport.
+ * One draw call, no framebuffers, a few dozen thousand pixels per frame: it keeps
+ * running during scroll (palette + flow never freeze) and leaves the GPU to page content.
  *
- * Budget: ~30 fps, canvas ≤ 1.5 DPR, field pass at 0.66 of that, pauses when the tab is hidden.
- * All tunables live in ./bg.ts (`bgDefaults`) and can be changed live from the dev toolbar.
+ * Film grain is NOT here: see ./grain.ts (a static noise canvas moved by the compositor).
+ *
+ * Scroll = time of day: every element in <body> with [data-daytime] anchors a palette at
+ * its centre; between two anchors the palette blends, so the day drifts as you read.
+ *
+ * Tunables: ./bg.ts (`bgDefaults`, per-tier overrides), live in the dev toolbar.
  * Reduced motion: one static frame, re-rendered only when the palette changes.
  * No WebGL / context lost: CSS gradient fallback driven by the same palette (CSS vars).
  */
@@ -28,52 +27,12 @@ const PALS = Object.fromEntries(Object.keys(daytimes).map((k) => [k, toPal(k as 
 
 const VERT = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
 
-const PRECISION = `
+const FRAG = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
 precision mediump float;
 #endif
-`;
-
-/** pass 2: upscale the field texture + crisp, uncorrelated film grain */
-const PRESENT = `${PRECISION}
-uniform sampler2D uTex;
-uniform vec2 uRes;
-uniform float uGrain;
-uniform float uFrame;
-uniform float uGrainSize;
-uniform vec2 uTexel;   // 1 / field texture size
-uniform float uSoft;   // soft-upsampling radius in field texels (0 = plain bilinear)
-
-// "Hash without Sine" (Dave Hoskins, MIT): no visible structure, time is a real 3rd dimension
-float hash13(vec3 p3){
-  p3=fract(p3*.1031);
-  p3+=dot(p3,p3.zyx+31.32);
-  return fract((p3.x+p3.y)*p3.z);
-}
-
-void main(){
-  vec2 uv=gl_FragCoord.xy/uRes;
-  vec3 col=texture2D(uTex,uv).rgb;
-  if(uSoft>0.){
-    // 3×3 tent over bilinear taps: a cheap blur that hides the texel grid of a tiny texture
-    vec2 o=uTexel*uSoft;
-    col=col*.25
-      +(texture2D(uTex,uv+vec2(o.x,0.)).rgb+texture2D(uTex,uv-vec2(o.x,0.)).rgb
-       +texture2D(uTex,uv+vec2(0.,o.y)).rgb+texture2D(uTex,uv-vec2(0.,o.y)).rgb)*.125
-      +(texture2D(uTex,uv+o).rgb+texture2D(uTex,uv-o).rgb
-       +texture2D(uTex,uv+vec2(o.x,-o.y)).rgb+texture2D(uTex,uv+vec2(-o.x,o.y)).rgb)*.0625;
-  }
-  vec2 cell=floor(gl_FragCoord.xy/uGrainSize);
-  // triangular distribution (sum of two) reads more like film than flat white noise
-  float n=hash13(vec3(cell,uFrame))+hash13(vec3(cell+71.3,uFrame+19.7))-1.;
-  col+=n*.7*uGrain;
-  gl_FragColor=vec4(col,1.);
-}`;
-
-/** pass 1: the field itself, no grain */
-const FIELD = `${PRECISION}
 uniform vec2 uRes;
 uniform float uTime;
 uniform vec3 uC[5];
@@ -141,7 +100,7 @@ void main(){
 }`;
 
 export function initField(root: HTMLElement): void {
-  const canvas = root.querySelector('canvas');
+  const canvas = root.querySelector<HTMLCanvasElement>('.field__canvas');
   const anchors = () => Array.from(document.querySelectorAll<HTMLElement>('body [data-daytime]'));
 
   // ── palette state ──
@@ -149,14 +108,12 @@ export function initField(root: HTMLElement): void {
   const cur: Pal = structuredClone(PALS[first] ?? PALS.sea);
   let target: Pal = structuredClone(cur);
   let locked: Daytime | null = null;
-  let nearest: Daytime = first;
 
   const mixPal = (a: Pal, b: Pal, k: number): Pal => a.map((c, i) => c.map((v, j) => v + ((b[i]![j] ?? 0) - v) * k)) as Pal;
 
   function computeTarget(): void {
     if (locked) {
       target = PALS[locked];
-      nearest = locked;
       return;
     }
     const els = anchors();
@@ -167,8 +124,7 @@ export function initField(root: HTMLElement): void {
       return { c: r.top + r.height / 2, d: (el.dataset.daytime as Daytime) ?? 'sea' };
     });
     let a = centres[0]!, b = centres[0]!;
-    if (yc <= a.c) b = a;
-    else {
+    if (yc > a.c) {
       a = centres[centres.length - 1]!;
       b = a;
       for (let i = 0; i < centres.length - 1; i++) {
@@ -183,31 +139,20 @@ export function initField(root: HTMLElement): void {
     const k0 = span > 0 ? (yc - a.c) / span : 0;
     const k = k0 * k0 * (3 - 2 * k0);
     target = mixPal(PALS[a.d] ?? PALS.sea, PALS[b.d] ?? PALS.sea, k);
-    nearest = k < 0.5 ? a.d : b.d;
+    const nearest = k < 0.5 ? a.d : b.d;
     if (document.documentElement.dataset.daytime !== nearest) document.documentElement.dataset.daytime = nearest;
   }
 
-  // ── CSS fallback vars (only written while the fallback is visible) ──
+  // ── CSS fallback vars (written only while the fallback is what you see) ──
   let lastCss = 0;
   function writeCss(now: number, force = false): void {
     if (!force && now - lastCss < 120) return;
     lastCss = now;
-    cur.forEach((c, i) => {
-      root.style.setProperty(`--f${i}`, `rgb(${c.map((v) => Math.round(v * 255)).join(' ')})`);
-    });
+    cur.forEach((c, i) => root.style.setProperty(`--f${i}`, `rgb(${c.map((v) => Math.round(v * 255)).join(' ')})`));
   }
 
   let scrollDirty = true;
-  let lastScroll = 0;
-  addEventListener(
-    'scroll',
-    () => {
-      scrollDirty = true;
-      lastScroll = performance.now();
-    },
-    { passive: true },
-  );
-  addEventListener('resize', () => (scrollDirty = true), { passive: true });
+  addEventListener('scroll', () => (scrollDirty = true), { passive: true });
   addEventListener('field:lock', (e) => {
     const d = (e as CustomEvent<Daytime | null>).detail;
     locked = d && d in PALS ? d : null;
@@ -215,62 +160,27 @@ export function initField(root: HTMLElement): void {
     kick();
   });
 
-  // ── WebGL ──
+  // ── WebGL: one program, one triangle ──
   let gl: WebGLRenderingContext | null = null;
   try {
-    gl = canvas?.getContext('webgl', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'low-power', preserveDrawingBuffer: false }) ?? null;
+    gl = canvas?.getContext('webgl', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'low-power' }) ?? null;
   } catch {
     gl = null;
   }
-
-  const fieldProg = gl ? build(gl, FIELD) : null;
-  const presentProg = gl ? build(gl, PRESENT) : null;
-  const useGL = Boolean(gl && fieldProg && presentProg && canvas);
-  if (!useGL) gl = null;
-  root.classList.toggle('field--gl', useGL);
+  const prog = gl ? build(gl) : null;
+  if (!prog) gl = null;
+  root.classList.toggle('field--gl', Boolean(gl));
   writeCss(0, true);
 
-  type U = Record<string, WebGLUniformLocation | null>;
-  const locs = (prog: WebGLProgram, names: string[]): U =>
-    Object.fromEntries(names.map((n) => [n, gl!.getUniformLocation(prog, n)]));
-  let uf: U = {};
-  let up: U = {};
-  let tex: WebGLTexture | null = null;
-  let fbo: WebGLFramebuffer | null = null;
-
-  if (gl && fieldProg && presentProg) {
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  const U: Record<string, WebGLUniformLocation | null> = {};
+  if (gl && prog) {
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    uf = locs(fieldProg, ['uRes', 'uTime', 'uC', 'uPtr', 'uScale', 'uWarp', 'uDetail', 'uHalo', 'uRipple', 'uGrad']);
-    up = locs(presentProg, ['uTex', 'uRes', 'uGrain', 'uFrame', 'uGrainSize', 'uTexel', 'uSoft']);
-
-    tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    fbo = gl.createFramebuffer();
+    for (const n of ['uRes', 'uTime', 'uC', 'uPtr', 'uScale', 'uWarp', 'uDetail', 'uHalo', 'uRipple', 'uGrad']) U[n] = gl.getUniformLocation(prog, n);
   }
-
-  // live settings (dev toolbar)
-  const applyOnOff = () => root.classList.toggle('field--off', !bg().fieldOn);
-  applyOnOff();
-  onBg((patch) => {
-    if ('fieldOn' in patch) applyOnOff();
-    if ('renderScale' in patch || 'maxDpr' in patch) w = 0; // force resize
-    if ('adaptive' in patch && !bg().adaptive && dyn !== 1) {
-      dyn = 1;
-      w = 0;
-    }
-    if ('canvasBlur' in patch && canvas) canvas.style.filter = bg().canvasBlur ? `blur(${bg().canvasBlur}px)` : '';
-    if (bg().fieldOn) writeCss(0, true);
-    kick();
-  });
-  if (canvas && bg().canvasBlur) canvas.style.filter = `blur(${bg().canvasBlur}px)`;
 
   canvas?.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
@@ -278,47 +188,41 @@ export function initField(root: HTMLElement): void {
     gl = null;
   });
 
-  // ── size: canvas at display resolution (≤ maxDpr), field texture at renderScale of it ──
-  let w = 0, h = 0, fw = 0, fh = 0;
-  /** adaptive multiplier on renderScale (1 = as configured) */
-  let dyn = 1;
-  let fboDirty = false;
-  function resize(): void {
+  // ── size: a tiny canvas, stretched by CSS ──
+  let w = 0, h = 0;
+  function resize(force = false): void {
     if (!gl || !canvas) return;
-    const c = bg();
-    const dpr = Math.min(devicePixelRatio || 1, c.maxDpr);
-    const nw = Math.max(1, Math.round(innerWidth * dpr));
-    const nh = Math.max(1, Math.round(canvas.clientHeight * dpr));
-    // ignore mobile toolbar jitter (canvas is 100lvh tall anyway)
-    // Mobile URL bar show/hide changes the height on every scroll direction change. The field is
-    // blurry, so let CSS stretch the canvas for that; only reallocate on real size changes.
-    const smallHeightChange = Math.abs(nh - h) < Math.max(40 * dpr, h * 0.25);
-    if (nw === w && smallHeightChange && !fboDirty) return;
-    fboDirty = false;
-    if (nw !== w || !smallHeightChange || !w) {
-      w = nw;
-      h = nh;
-      canvas.width = w;
-      canvas.height = h;
-    }
-    fw = Math.max(1, Math.round(w * c.renderScale * dyn));
-    fh = Math.max(1, Math.round(h * c.renderScale * dyn));
-    window.__bgStats = { dyn, frameMs: frameMs, fieldPx: `${fw}×${fh} → ${w}×${h}` };
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, fw, fh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const res = bg().resolution;
+    const nw = Math.max(16, Math.round(root.clientWidth * res));
+    const nh = Math.max(16, Math.round(root.clientHeight * res));
+    // ignore the mobile URL bar: small height changes are just stretched
+    if (!force && nw === w && Math.abs(nh - h) < Math.max(8, h * 0.2)) return;
+    w = canvas.width = nw;
+    h = canvas.height = nh;
+    gl.viewport(0, 0, w, h);
+    window.__bgStats = { dyn: 1, frameMs: 0, fieldPx: `${w}×${h}` };
   }
   addEventListener('resize', () => {
     resize();
     kick();
   });
 
+  // live settings (dev toolbar)
+  const applyDom = () => {
+    root.classList.toggle('field--off', !bg().fieldOn);
+    if (canvas) canvas.style.filter = bg().canvasBlur ? `blur(${bg().canvasBlur}px)` : '';
+  };
+  applyDom();
+  onBg((patch) => {
+    applyDom();
+    if ('resolution' in patch) resize(true);
+    writeCss(0, true);
+    kick();
+  });
+
   // ── pointer (fine pointers only) ──
   const ptr = { x: 0.5, y: 0.5, s: 0, ts: 0 };
-  const finePointer = matchMedia('(hover: hover) and (pointer: fine)').matches;
-  if (finePointer) {
+  if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
     addEventListener(
       'pointermove',
       (e) => {
@@ -334,59 +238,24 @@ export function initField(root: HTMLElement): void {
   // ── loop ──
   let raf = 0;
   let last = 0;
-  let clock = 12; // seconds of shader time (start mid-flow, not at a symmetric t=0)
+  let clock = 12; // seconds of shader time (start mid-flow)
   let ready = false;
-  let frameMs = 0;
-  let slow = 0;
-  let calm = 0;
+  const flat = new Float32Array(15);
 
   function frame(now: number): void {
     raf = 0;
     const c = bg();
-    const dt = Math.min(0.1, last ? (now - last) / 1000 : 0.016);
-    // while the page scrolls, give the GPU to content: hold the field (it moves too slowly to notice)
-    if (c.pauseOnScroll && ready && now - lastScroll < 200) {
-      last = 0; // don't count the pause as a slow frame
-      raf = requestAnimationFrame(frame);
-      return;
-    }
     if (!motion.reduced && last && now - last < 1000 / c.fpsCap - 2) {
-      // fps cap (30 by default): the field is slow; spend the battery elsewhere
       raf = requestAnimationFrame(frame);
       return;
     }
-    // adaptive resolution: watch the interval between drawn frames
-    if (last && !motion.reduced && !c.fieldPaused) {
-      const iv = now - last;
-      frameMs = frameMs ? frameMs * 0.9 + iv * 0.1 : iv;
-      const budget = 1000 / c.fpsCap;
-      if (c.adaptive && gl) {
-        if (frameMs > budget * 1.2) {
-          slow += dt;
-          calm = 0;
-        } else if (frameMs < budget * 1.12) {
-          calm += dt;
-          slow = 0;
-        }
-        if (slow > 0.5 && dyn > 0.35) {
-          dyn = Math.max(0.35, +(dyn - 0.15).toFixed(2));
-          slow = 0;
-          fboDirty = true;
-        } else if (calm > 6 && dyn < 1) {
-          dyn = Math.min(1, +(dyn + 0.1).toFixed(2));
-          calm = 0;
-          fboDirty = true;
-        }
-      }
-      if (window.__bgStats) window.__bgStats.frameMs = frameMs;
-    }
+    const dt = Math.min(0.1, last ? (now - last) / 1000 : 0.016);
     last = now;
 
     if (scrollDirty) {
       computeTarget();
       scrollDirty = false;
     }
-
     // ease palette towards target (also smooths anchor jumps)
     const k = motion.reduced ? 1 : 1 - Math.exp(-dt * 2.6);
     let delta = 0;
@@ -395,10 +264,10 @@ export function initField(root: HTMLElement): void {
         const d = target[i]![j]! - cur[i]![j]!;
         cur[i]![j]! += d * k;
         delta += Math.abs(d);
+        flat[i * 3 + j] = cur[i]![j]!;
       }
 
     if (!gl || !c.fieldOn) {
-      // CSS fallback: keep easing while the palette moves, then write the final value once
       if (delta > 0.002) {
         writeCss(now);
         raf = requestAnimationFrame(frame);
@@ -412,44 +281,23 @@ export function initField(root: HTMLElement): void {
     ptr.ts = Math.max(0, ptr.ts - dt * 0.8);
 
     resize();
-    if (!fieldProg || !presentProg) return;
-
-    // pass 1: field → low-res texture
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, fw, fh);
-    gl.useProgram(fieldProg);
-    gl.uniform2f(uf.uRes!, fw, fh);
-    gl.uniform1f(uf.uTime!, clock);
-    gl.uniform3fv(uf.uC!, cur.flat());
-    gl.uniform3f(uf.uPtr!, ptr.x, ptr.y, motion.reduced ? 0 : ptr.s);
-    gl.uniform1f(uf.uScale!, c.scale);
-    gl.uniform1f(uf.uWarp!, c.warp);
-    gl.uniform1f(uf.uDetail!, Math.round(c.detail));
-    gl.uniform1f(uf.uHalo!, c.halo);
-    gl.uniform1f(uf.uRipple!, c.ripple);
-    gl.uniform1f(uf.uGrad!, c.gradientNoise ? 1 : 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    // pass 2: upscale + grain at full canvas resolution
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, w, h);
-    gl.useProgram(presentProg);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.uniform1i(up.uTex!, 0);
-    gl.uniform2f(up.uRes!, w, h);
-    gl.uniform1f(up.uGrain!, c.grainOn ? c.grain : 0);
-    // frame counter for the grain: wraps after ~6 min at 12 fps — never visible
-    gl.uniform1f(up.uFrame!, still || !c.grainAnimated ? 1 : Math.floor((now / 1000) * c.grainFps) % 4096);
-    gl.uniform1f(up.uGrainSize!, Math.max(1, c.grainSize));
-    gl.uniform2f(up.uTexel!, 1 / fw, 1 / fh);
-    gl.uniform1f(up.uSoft!, c.soften);
+    gl.uniform2f(U.uRes!, w, h);
+    gl.uniform1f(U.uTime!, clock);
+    gl.uniform3fv(U.uC!, flat);
+    gl.uniform3f(U.uPtr!, ptr.x, ptr.y, motion.reduced ? 0 : ptr.s);
+    gl.uniform1f(U.uScale!, c.scale);
+    gl.uniform1f(U.uWarp!, c.warp);
+    gl.uniform1f(U.uDetail!, Math.round(c.detail));
+    gl.uniform1f(U.uHalo!, c.halo);
+    gl.uniform1f(U.uRipple!, c.ripple);
+    gl.uniform1f(U.uGrad!, c.gradientNoise ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     if (!ready) {
       ready = true;
       root.classList.add('field--ready');
     }
+    if (window.__bgStats) window.__bgStats.frameMs = window.__bgStats.frameMs * 0.9 + (dt * 1000) * 0.1;
 
     const settled = delta < 0.002 && !scrollDirty;
     if (still && settled && ptr.s < 0.01) return; // static frame
@@ -459,7 +307,6 @@ export function initField(root: HTMLElement): void {
   function kick(): void {
     if (!raf && !document.hidden) raf = requestAnimationFrame(frame);
   }
-
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       cancelAnimationFrame(raf);
@@ -471,11 +318,10 @@ export function initField(root: HTMLElement): void {
   });
   addEventListener('scroll', kick, { passive: true });
   motion.onChange(() => kick());
-
   kick();
 }
 
-function build(gl: WebGLRenderingContext, frag: string): WebGLProgram | null {
+function build(gl: WebGLRenderingContext): WebGLProgram | null {
   const sh = (type: number, src: string) => {
     const s = gl.createShader(type);
     if (!s) return null;
@@ -488,7 +334,7 @@ function build(gl: WebGLRenderingContext, frag: string): WebGLProgram | null {
     return s;
   };
   const v = sh(gl.VERTEX_SHADER, VERT);
-  const f = sh(gl.FRAGMENT_SHADER, frag);
+  const f = sh(gl.FRAGMENT_SHADER, FRAG);
   if (!v || !f) return null;
   const p = gl.createProgram();
   if (!p) return null;

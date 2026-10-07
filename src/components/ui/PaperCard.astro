@@ -41,8 +41,9 @@ const { as: Tag = 'div', tone = 'paper', tilt = -1.2, tape = false, class: class
     background-color: var(--bg);
     background-image: var(--tex-plaque);
     background-size: var(--tex-plaque-size);
-    box-shadow: var(--plaque-edge);
-    filter: url(#rough) drop-shadow(0 14px 16px rgb(var(--c-ink-rgb) / 0.13));
+    box-shadow:
+      var(--plaque-edge),
+      0 14px 22px -10px rgb(var(--c-ink-rgb) / 0.2);
   }
   .scrap__tape {
     position: absolute;
@@ -56,7 +57,6 @@ const { as: Tag = 'div', tone = 'paper', tilt = -1.2, tape = false, class: class
     background-image: var(--tex-pigment);
     background-size: var(--tex-pigment-size);
     border-radius: 2px 4px 3px 2px;
-    filter: url(#rough);
   }
   @media (hover: hover) {
     .scrap:hover {

@@ -1,6 +1,7 @@
 ---
 /**
  * A soft colour blob with a sprayed, speckled edge and pigment texture.
+ * The edge is a pre-rendered mask image (cheap, cached), not a live SVG filter.
  * Purely decorative. Size it with width/height via `style` or a class.
  */
 import { colorVar, type PaletteName } from '~/lib/palette';
@@ -11,7 +12,7 @@ interface Props {
   glow?: PaletteName;
   shape?: 'a' | 'b' | 'c';
   rotate?: number;
-  /** extra defocus in px, on top of the spray edge */
+  /** > 0 = defocused variant (soft mask); the exact value no longer matters */
   blur?: number;
   class?: string;
   style?: string;
@@ -20,27 +21,24 @@ const { tone = 'sun', glow, shape = 'a', rotate = 0, blur = 0, class: className,
 const vars = [
   `--bg:${colorVar(tone)}`,
   glow && `--glow:${colorVar(glow)}`,
-  `--r:var(--blob-${shape})`,
+  `--m:var(--mask-${shape}${blur ? '-soft' : ''})`,
   `--rot:${rotate}deg`,
-  blur && `--defocus:${blur}px`,
   style,
 ]
   .filter(Boolean)
   .join(';');
 ---
 
-<span class:list={['spray-blob', className]} style={vars} aria-hidden="true"></span>
+<span class:list={['spray-blob', 'spray-mask', className]} style={vars} aria-hidden="true"></span>
 
 <style>
   .spray-blob {
     display: block;
-    border-radius: var(--r);
     rotate: var(--rot);
     background-color: var(--bg);
     background-image:
       var(--tex-pigment),
       radial-gradient(60% 55% at 38% 34%, color-mix(in srgb, var(--glow, var(--c-white)) 55%, transparent), transparent 70%);
     background-size: var(--tex-pigment-size), 100% 100%;
-    filter: url(#spray) blur(var(--defocus, 0px));
   }
 </style>

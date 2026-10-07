@@ -26,25 +26,20 @@ export const bgDefaults = {
   detail: 4,
   /** bright defocused halo mix */
   halo: 0.7,
-  /** in-shader film grain — the only full-screen grain layer */
+  /** film grain over the field (scripts/grain.ts): opacity of a static noise layer */
   grainOn: true,
-  grain: 0.055,
+  grain: 0.12,
+  /** grain "animation": the compositor jumps the noise layer to random offsets */
   grainAnimated: true,
   grainFps: 12,
-  /** grain cell size in canvas pixels (1 = finest) */
+  /** grain cell size in CSS px */
   grainSize: 1,
   /** pointer ripple strength (mouse only) */
   ripple: 1,
-  /** field pass resolution, relative to the canvas (grain is always full canvas res) */
-  renderScale: 0.45,
-  /** lower the field resolution automatically when frames run late, raise it back when calm */
-  adaptive: true,
-  /** canvas resolution cap (device pixel ratio); below 1 the browser upscales the canvas */
-  maxDpr: 1.25,
+  /** field canvas size relative to CSS px — the browser stretches it; the field is soft anyway */
+  resolution: 0.25,
   fpsCap: 30,
-  /** soft upsampling of the field texture (texels): hides low resolution on weak devices */
-  soften: 1,
-  /** skip field frames (and line boil) while the page is scrolling — leaves the GPU to page content */
+  /** hold idle drawing animations and line boil while the page scrolls */
   pauseOnScroll: true,
   /** extra CSS blur on the canvas, px */
   canvasBlur: 0,
@@ -56,8 +51,8 @@ export const bgDefaults = {
   pigmentTex: true,
   plaqueTex: true,
   plaqueEdge: true,
-  /** frosted (backdrop-filter) nav; expensive over an animated canvas */
-  frostBlur: true,
+  /** frosted (backdrop-filter) nav; re-blurs the animated canvas every frame — off by default */
+  frostBlur: false,
 
   // ── SVG filters / drawings ──
   /** displacement filter on drawings (the hand wobble); re-runs on every idle-animation frame */
@@ -67,9 +62,6 @@ export const bgDefaults = {
   boilScale: 3.4,
   /** idle micro-life of drawings (sway, tail, hop…) */
   lifeOn: true,
-  sprayScale: 22,
-  sprayBlur: 5,
-  roughScale: 3.5,
 };
 
 export type BgConfig = { -readonly [K in keyof typeof bgDefaults]: (typeof bgDefaults)[K] };
@@ -77,38 +69,14 @@ export type Tier = 'high' | 'mid' | 'low';
 
 /**
  * high: desktop / fine pointer.
- * mid:  phones and tablets — field at CSS-px resolution, fewer octaves, no SVG filter on
- *       animated drawings, no backdrop blur.
- * low:  phones with ≤4 GB RAM / ≤4 cores / Save-Data — everything above, plus a canvas at
- *       0.6 CSS px, tiny field texture with soft upsampling, 20 fps, 3 octaves, no idle animation.
+ * mid:  phones and tablets — smaller field canvas, no SVG filter on drawings.
+ * low:  phones with ≤4 GB RAM / ≤4 cores / Save-Data — smallest canvas, 24 fps, 3 octaves,
+ *       no idle animation.
  */
 export const tierOverrides: Record<Tier, Partial<BgConfig>> = {
   high: {},
-  mid: {
-    maxDpr: 1,
-    renderScale: 0.45,
-    detail: 4,
-    soften: 1.25,
-    drawFilter: false,
-    boilOn: false,
-    frostBlur: false,
-    ripple: 0,
-  },
-  // weak phones: hard cap. The field is soft by nature, so a tiny texture + soft upsampling
-  // reads the same, and the GPU/memory budget goes to page content instead.
-  low: {
-    maxDpr: 0.6,
-    renderScale: 0.35,
-    detail: 3,
-    soften: 2,
-    fpsCap: 20,
-    grain: 0.035,
-    drawFilter: false,
-    boilOn: false,
-    frostBlur: false,
-    ripple: 0,
-    lifeOn: false,
-  },
+  mid: { resolution: 0.2, drawFilter: false, boilOn: false, ripple: 0 },
+  low: { resolution: 0.15, fpsCap: 24, detail: 3, drawFilter: false, boilOn: false, ripple: 0, lifeOn: false },
 };
 
 declare global {
