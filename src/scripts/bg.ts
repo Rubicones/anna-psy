@@ -10,6 +10,8 @@
  * Stored on `window` so every bundle (layout script, toolbar) shares one object.
  */
 
+import { sprayDefaults } from '~/lib/spray';
+
 export const bgDefaults = {
   // ── WebGL field ──
   fieldOn: true,
@@ -62,10 +64,12 @@ export const bgDefaults = {
   boilScale: 3.4,
   /** idle micro-life of drawings (sway, tail, hop…) */
   lifeOn: true,
-  /** sprayed edges as a live SVG filter (true) or pre-rendered mask images (false, cheaper) */
-  liveSpray: true,
-  sprayScale: 22,
-  sprayBlur: 5,
+  /** spray-dot tile size of colour shapes' edges, px (bigger = coarser, sparser) */
+  speckSize: 160,
+  /** light inner highlight of colour shapes (0..1) */
+  blobGlow: 0.55,
+  // sprayed edge + pigment texture of colour shapes (built by src/lib/spray.ts)
+  ...sprayDefaults,
 };
 
 export type BgConfig = { -readonly [K in keyof typeof bgDefaults]: (typeof bgDefaults)[K] };
@@ -75,12 +79,12 @@ export type Tier = 'high' | 'mid' | 'low';
  * high: desktop / fine pointer.
  * mid:  phones and tablets — smaller field canvas, no SVG filter on drawings.
  * low:  phones with ≤4 GB RAM / ≤4 cores / Save-Data — smallest canvas, 24 fps, 3 octaves,
- *       no idle animation, sprayed edges from pre-rendered masks.
+ *       no idle animation.
  */
 export const tierOverrides: Record<Tier, Partial<BgConfig>> = {
   high: {},
   mid: { resolution: 0.2, drawFilter: false, boilOn: false, ripple: 0 },
-  low: { resolution: 0.15, fpsCap: 24, detail: 3, drawFilter: false, boilOn: false, ripple: 0, lifeOn: false, liveSpray: false },
+  low: { resolution: 0.15, fpsCap: 24, detail: 3, drawFilter: false, boilOn: false, ripple: 0, lifeOn: false },
 };
 
 declare global {

@@ -13,7 +13,6 @@ export function initPerfClasses(): void {
     html.toggle('bg-no-frost', !c.frostBlur);
     html.toggle('bg-no-draw-filter', !c.drawFilter);
     html.toggle('bg-no-life', !c.lifeOn);
-    html.toggle('bg-mask-spray', !c.liveSpray);
   };
   sync();
   onBg(sync);

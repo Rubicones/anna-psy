@@ -1,0 +1,140 @@
+/**
+ * Builders for the colour-shape art: sprayed-edge masks and the pigment texture.
+ * One source for two consumers:
+ *   - scripts/gen-masks.ts writes the shipped files (src/styles/masks/*, textures/pigment.svg);
+ *   - the dev toolbar rebuilds them live as data URIs while you tune.
+ * To bake tuned values: paste them into `sprayDefaults` and re-run gen-masks.
+ */
+import { wobble, type Pt } from './wobble';
+
+export const sprayDefaults = {
+  // ── sprayed edge (masks) ──
+  /** blur of the solid body's edge (viewBox units, box = 200) */
+  coreBlur: 13,
+  /** how far the dot zone reaches beyond the body (1 = no further) */
+  haloScale: 1.07,
+  /** how gradually the dot zone fades out */
+  haloBlur: 21.5,
+  /** defocused variants (blobs with `blur`) */
+  softCoreBlur: 12,
+  softHaloBlur: 16,
+  /** dot size: noise frequency — higher = finer dots */
+  speckFreq: 1,
+  /** 0..1 — how many dots */
+  speckAmount: 0.7,
+  /** dot edge hardness (alpha contrast) */
+  speckHard: 9,
+
+  // ── pigment texture inside colour shapes ──
+  /** paper-tooth relief strength */
+  pigRelief: 0.06,
+  /** relief grain size: noise frequency — higher = finer */
+  pigReliefFreq: 0.07,
+  /** darker/lighter pigment patches strength */
+  pigClouds: 0.08,
+  /** patch size: noise frequency — lower = bigger patches */
+  pigCloudFreq: 0.02,
+};
+export type SprayParams = typeof sprayDefaults;
+
+const roundish = (seed: number, irr: number, k: number, rx = 74, ry = 72): Pt[] => {
+  let a = seed;
+  const rand = () => (a = (a * 16807) % 2147483647) / 2147483647;
+  return Array.from({ length: k }, (_, i) => {
+    const t = (i / k) * Math.PI * 2;
+    const m = 1 + (rand() - 0.5) * 2 * irr;
+    return [100 + Math.cos(t) * rx * m, 100 + Math.sin(t) * ry * m] as Pt;
+  });
+};
+const superellipse = (count: number, n: number, rx: number, ry: number): Pt[] =>
+  Array.from({ length: count }, (_, i) => {
+    const t = (i / count) * Math.PI * 2;
+    const c = Math.cos(t), s = Math.sin(t);
+    return [100 + Math.sign(c) * Math.abs(c) ** (2 / n) * rx, 100 + Math.sign(s) * Math.abs(s) ** (2 / n) * ry] as Pt;
+  });
+
+export const shapeNames = ['a', 'b', 'c', 'pill', 'panel'] as const;
+export const softShapes = ['a', 'b', 'c'] as const;
+
+let pathCache: Record<string, string> | null = null;
+function paths(): Record<string, string> {
+  if (pathCache) return pathCache;
+  const pts: Record<string, Pt[]> = {
+    a: roundish(11, 0.12, 8),
+    b: roundish(29, 0.15, 7, 76, 70),
+    c: roundish(53, 0.13, 9, 72, 75),
+    // wide soft pill for buttons (stretched to ~3:1, so the shape itself is round-ish)
+    pill: superellipse(20, 3, 78, 70),
+    // soft superellipse for content blobs (keeps text corners inside)
+    panel: superellipse(24, 4.5, 80, 78),
+  };
+  pathCache = Object.fromEntries(
+    Object.entries(pts).map(([name, p]) => [
+      name,
+      wobble(p, { closed: true, overshoot: 0, amp: name === 'panel' || name === 'pill' ? 0.8 : 1.4, wave: 60, step: 6, jitter: 0.5, seed: name.length * 7 }),
+    ]),
+  );
+  return pathCache;
+}
+
+const shapeSvg = (d: string, blur: number, scale: number) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" preserveAspectRatio="none">
+<filter id="b" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${blur}"/></filter>
+<path d="${d}" fill="#fff" filter="url(#b)" transform="translate(100 100) scale(${scale}) translate(-100 -100)"/>
+</svg>
+`;
+
+/** All mask images: core-*, halo-*, *-soft variants and the speck tile. */
+export function buildMasks(p: SprayParams): Record<string, string> {
+  const out: Record<string, string> = {};
+  const d = paths();
+  for (const name of shapeNames) {
+    out[`core-${name}`] = shapeSvg(d[name]!, p.coreBlur, 1);
+    out[`halo-${name}`] = shapeSvg(d[name]!, p.haloBlur, p.haloScale);
+  }
+  for (const name of softShapes) {
+    out[`core-${name}-soft`] = shapeSvg(d[name]!, p.softCoreBlur, 0.96);
+    out[`halo-${name}-soft`] = shapeSvg(d[name]!, p.softHaloBlur, p.haloScale + 0.02);
+  }
+  // alpha = hard·(A − threshold): threshold drops as speckAmount grows
+  const threshold = 0.65 - 0.2 * p.speckAmount;
+  out.speck = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">
+<filter id="s" x="0" y="0" width="100%" height="100%">
+<feTurbulence type="fractalNoise" baseFrequency="${p.speckFreq}" numOctaves="1" seed="4" stitchTiles="stitch"/>
+<feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 ${p.speckHard} ${(-p.speckHard * threshold).toFixed(3)}"/>
+</filter>
+<rect width="100%" height="100%" filter="url(#s)"/>
+</svg>
+`;
+  return out;
+}
+
+/** Pigment-on-paper overlay for colour fills: relief tooth + density clouds. Alpha only. */
+export function buildPigment(p: SprayParams): string {
+  const flat = 0.819; // sin(55°): a flat surface's lighting
+  const r = p.pigRelief;
+  const k = p.pigClouds;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360">
+  <!-- generated by scripts/gen-masks.ts from src/lib/spray.ts — edit the params there -->
+  <filter id="p" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="${p.pigReliefFreq}" numOctaves="3" seed="7" stitchTiles="stitch" result="relief" />
+    <feDiffuseLighting in="relief" surfaceScale="2" lighting-color="#fff" result="lit">
+      <feDistantLight azimuth="225" elevation="55" />
+    </feDiffuseLighting>
+    <feColorMatrix in="lit" result="shade" values="0 0 0 0 0.20  0 0 0 0 0.14  0 0 0 0 0.10  ${-r} 0 0 0 ${(r * flat).toFixed(3)}" />
+    <feColorMatrix in="lit" result="hi" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.97  ${r} 0 0 0 ${(-r * flat).toFixed(3)}" />
+    <feTurbulence type="fractalNoise" baseFrequency="${p.pigCloudFreq}" numOctaves="3" seed="2" stitchTiles="stitch" result="c" />
+    <feColorMatrix in="c" result="dense" values="0 0 0 0 0.20  0 0 0 0 0.12  0 0 0 0 0.08  ${-k} 0 0 0 ${(k * 0.5).toFixed(3)}" />
+    <feColorMatrix in="c" result="thin" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.96  0 ${k} 0 0 ${(-k * 0.53).toFixed(3)}" />
+    <feMerge>
+      <feMergeNode in="dense" />
+      <feMergeNode in="thin" />
+      <feMergeNode in="shade" />
+      <feMergeNode in="hi" />
+    </feMerge>
+  </filter>
+  <rect width="100%" height="100%" filter="url(#p)" />
+</svg>
+`;
+}
+
+export const svgUrl = (svg: string) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;

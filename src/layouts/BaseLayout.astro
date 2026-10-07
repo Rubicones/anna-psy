@@ -43,7 +43,7 @@ const rootVars = `:root{${cssVars()}}`;
         // mirror of tierOverrides in scripts/bg.ts for the CSS-driven switches, so the first paint is already light
         d.classList.add('bg-no-frost');
         if (d.dataset.quality !== 'high') d.classList.add('bg-no-draw-filter');
-        if (d.dataset.quality === 'low') d.classList.add('bg-no-life', 'bg-mask-spray');
+        if (d.dataset.quality === 'low') d.classList.add('bg-no-life');
       })();
     </script>
     <Fonts />

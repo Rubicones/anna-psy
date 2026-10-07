@@ -21,6 +21,7 @@
 </div>
 
 <script>
+  import { buildMasks, buildPigment, sprayDefaults, svgUrl, type SprayParams } from '~/lib/spray';
   import { bg, bgDefaults, setBg, tier, tierDefaults, type BgConfig } from '~/scripts/bg';
 
   type Key = keyof BgConfig;
@@ -60,8 +61,32 @@
         { key: 'glowBlur', label: 'размытие свечения, px', min: 0, max: 260, step: 2 },
         { key: 'plaqueTex', label: 'гуашь на плашках' },
         { key: 'plaqueEdge', label: 'затемнение края плашек' },
-        { key: 'pigmentTex', label: 'пигмент на цветных формах' },
         { key: 'frostBlur', label: 'размытие под навигацией (backdrop-filter)' },
+      ],
+    },
+    {
+      title: 'Цветные пятна: край-спрей',
+      ctls: [
+        { key: 'coreBlur', label: 'мягкость края тела', min: 0, max: 16, step: 0.5 },
+        { key: 'haloScale', label: 'ширина зоны брызг', min: 1, max: 1.4, step: 0.01 },
+        { key: 'haloBlur', label: 'затухание брызг', min: 1, max: 30, step: 0.5 },
+        { key: 'speckAmount', label: 'количество точек', min: 0, max: 1, step: 0.02 },
+        { key: 'speckFreq', label: 'размер точек (больше = мельче)', min: 0.2, max: 1.5, step: 0.05 },
+        { key: 'speckHard', label: 'чёткость точек', min: 2, max: 30, step: 1 },
+        { key: 'speckSize', label: 'плитка точек, px (крупнее и реже)', min: 60, max: 400, step: 10 },
+        { key: 'softCoreBlur', label: 'расфокус-пятна: мягкость тела', min: 2, max: 30, step: 0.5 },
+        { key: 'softHaloBlur', label: 'расфокус-пятна: затухание брызг', min: 2, max: 40, step: 0.5 },
+      ],
+    },
+    {
+      title: 'Цветные пятна: текстура',
+      ctls: [
+        { key: 'pigmentTex', label: 'текстура пигмента' },
+        { key: 'pigRelief', label: 'рельеф бумаги', min: 0, max: 1, step: 0.02 },
+        { key: 'pigReliefFreq', label: 'зерно рельефа (больше = мельче)', min: 0.02, max: 0.4, step: 0.01 },
+        { key: 'pigClouds', label: 'пятна плотности краски', min: 0, max: 1, step: 0.02 },
+        { key: 'pigCloudFreq', label: 'размер пятен краски (меньше = крупнее)', min: 0.003, max: 0.06, step: 0.001 },
+        { key: 'blobGlow', label: 'светлый блик внутри', min: 0, max: 1, step: 0.05 },
       ],
     },
     {
@@ -73,9 +98,7 @@
         { key: 'boilFps', label: 'частота кипения, к/с', min: 1, max: 24, step: 1 },
         { key: 'boilScale', label: 'дрожь линий', min: 0, max: 10, step: 0.1 },
         { key: 'pauseOnScroll', label: 'рисунки замирают во время скролла' },
-        { key: 'liveSpray', label: 'спрей-край живым фильтром (выкл = маски)' },
-        { key: 'sprayScale', label: 'спрей: разброс края', min: 0, max: 40, step: 1 },
-        { key: 'sprayBlur', label: 'спрей: мягкость края', min: 0, max: 12, step: 0.5 },
+
       ],
     },
   ];
@@ -97,12 +120,36 @@
     css.setProperty('--glow-blur', `${c.glowBlur}px`);
     c.plaqueTex ? css.removeProperty('--tex-plaque') : css.setProperty('--tex-plaque', 'none');
     c.plaqueEdge ? css.removeProperty('--plaque-edge') : css.setProperty('--plaque-edge', '0 0 0 0 transparent');
-    c.pigmentTex ? css.removeProperty('--tex-pigment') : css.setProperty('--tex-pigment', 'none');
     attr('#boil feDisplacementMap', 'scale', c.boilScale);
     attr('#boil-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
     attr('#still-ui feDisplacementMap', 'scale', +(c.boilScale * 0.88).toFixed(2));
-    attr('#spray feDisplacementMap', 'scale', c.sprayScale);
-    attr('#spray feGaussianBlur', 'stdDeviation', c.sprayBlur);
+    css.setProperty('--speck-size', `${c.speckSize}px`);
+    css.setProperty('--blob-glow', String(c.blobGlow));
+    applySpray(c);
+  }
+
+  // ── colour shapes: rebuild mask / pigment images live (only when their params change) ──
+  const sprayKeys = Object.keys(sprayDefaults) as (keyof SprayParams)[];
+  const maskVar = (name: string) => (name === 'speck' ? '--mask-speck' : `--${name}`);
+  let lastSpray = '';
+  let sprayFrame = 0;
+  function applySpray(c: BgConfig): void {
+    const sig = JSON.stringify([c.pigmentTex, ...sprayKeys.map((k) => c[k])]);
+    if (sig === lastSpray) return;
+    lastSpray = sig;
+    cancelAnimationFrame(sprayFrame);
+    sprayFrame = requestAnimationFrame(() => {
+      const params = Object.fromEntries(sprayKeys.map((k) => [k, c[k]])) as SprayParams;
+      const isDefault = sprayKeys.every((k) => c[k] === sprayDefaults[k]);
+      const masks = buildMasks(params);
+      // defaults → back to the shipped files; otherwise live data URIs
+      for (const [name, svg] of Object.entries(masks)) {
+        isDefault ? css.removeProperty(maskVar(name)) : css.setProperty(maskVar(name), svgUrl(svg));
+      }
+      if (!c.pigmentTex) css.setProperty('--tex-pigment', 'none');
+      else if (isDefault) css.removeProperty('--tex-pigment');
+      else css.setProperty('--tex-pigment', svgUrl(buildPigment(params)));
+    });
   }
 
   function diff(): Partial<BgConfig> {
